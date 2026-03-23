@@ -185,3 +185,59 @@ function appointment_update_10002(): string
 
     return 'Seeded appointment types and agencies.';
 }
+
+/**
+ * Add 'confirmed' status to appointment entity and install default settings.
+ */
+function appointment_update_10003(): string
+{
+    // Update entity field definition to include 'confirmed' status.
+    $update_manager = \Drupal::entityDefinitionUpdateManager();
+    $storage_definition = $update_manager->getFieldStorageDefinition('status', 'appointment');
+    if ($storage_definition instanceof \Drupal\Core\Field\BaseFieldDefinition) {
+        $storage_definition->setSettings([
+            'allowed_values' => [
+                'booked' => 'Booked',
+                'confirmed' => 'Confirmed',
+                'cancelled' => 'Cancelled',
+            ],
+        ]);
+        $update_manager->updateFieldStorageDefinition($storage_definition);
+    }
+
+    // Install default config if it doesn't exist yet.
+    $config = \Drupal::configFactory()->getEditable('appointment.settings');
+    if ($config->isNew()) {
+        $config
+            ->set('slot_duration', 60)
+            ->set('working_hours_start', '08:00')
+            ->set('working_hours_end', '18:00')
+            ->set('max_advance_days', 90)
+            ->set('csv_batch_size', 100)
+            ->set('notification_email', '')
+            ->save();
+    }
+
+    return 'Added confirmed status and default settings.';
+}
+
+/**
+ * Add reminder_sent field and reminder_hours_before config.
+ */
+function appointment_update_10004(): string
+{
+    // Install 'reminder_sent' field on appointment entity.
+    $update_manager = \Drupal::entityDefinitionUpdateManager();
+    $field = \Drupal\Core\Field\BaseFieldDefinition::create('boolean')
+        ->setLabel(new \Drupal\Core\StringTranslation\TranslatableMarkup('Reminder sent'))
+        ->setDefaultValue(FALSE);
+    $update_manager->installFieldStorageDefinition('reminder_sent', 'appointment', 'appointment', $field);
+
+    // Add reminder_hours_before to config.
+    $config = \Drupal::configFactory()->getEditable('appointment.settings');
+    if ($config->get('reminder_hours_before') === NULL) {
+        $config->set('reminder_hours_before', 24)->save();
+    }
+
+    return 'Added reminder_sent field and reminder config.';
+}

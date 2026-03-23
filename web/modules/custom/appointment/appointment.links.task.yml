@@ -1,0 +1,22 @@
+appointment.admin_dashboard:
+  title: "Dashboard"
+  route_name: appointment.admin_dashboard
+  base_route: appointment.admin_dashboard
+
+appointment.admin_list:
+  title: "All Appointments"
+  route_name: appointment.admin_list
+  base_route: appointment.admin_dashboard
+  weight: 1
+
+appointment.admin_export_csv:
+  title: "Export CSV"
+  route_name: appointment.admin_export_csv
+  base_route: appointment.admin_dashboard
+  weight: 2
+
+appointment.admin_settings:
+  title: "Settings"
+  route_name: appointment.admin_settings
+  base_route: appointment.admin_dashboard
+  weight: 10

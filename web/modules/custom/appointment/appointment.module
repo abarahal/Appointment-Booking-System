@@ -29,7 +29,53 @@ function appointment_theme(array $existing, string $type, string $theme, string 
             ],
             'template' => 'appointment-list',
         ],
+        'appointment_email_confirmation' => [
+            'variables' => [
+                'appointment' => NULL,
+                'site_name' => NULL,
+                'manage_url' => NULL,
+                'date_label' => NULL,
+            ],
+            'template' => 'email/appointment-email-confirmation',
+        ],
+        'appointment_email_modification' => [
+            'variables' => [
+                'appointment' => NULL,
+                'site_name' => NULL,
+                'manage_url' => NULL,
+                'date_label' => NULL,
+            ],
+            'template' => 'email/appointment-email-modification',
+        ],
+        'appointment_email_cancellation' => [
+            'variables' => [
+                'appointment' => NULL,
+                'site_name' => NULL,
+                'manage_url' => NULL,
+                'date_label' => NULL,
+            ],
+            'template' => 'email/appointment-email-cancellation',
+        ],
+        'appointment_email_reminder' => [
+            'variables' => [
+                'appointment' => NULL,
+                'site_name' => NULL,
+                'manage_url' => NULL,
+                'date_label' => NULL,
+                'hours_until' => NULL,
+            ],
+            'template' => 'email/appointment-email-reminder',
+        ],
     ];
+}
+
+/**
+ * Implements hook_page_attachments().
+ */
+function appointment_page_attachments(array &$attachments): void
+{
+    $attachments['#attached']['library'][] = 'appointment/appointment.frontend';
+    $attachments['#attached']['drupalSettings']['dialogStack'] ??= [];
 }
 
 /**
@@ -44,25 +90,107 @@ function appointment_mail(string $key, array &$message, array $params): void
     }
 
     $t = \Drupal::translation();
-    $site_name = \Drupal::config('system.site')->get('name') ?: 'Drupal site';
-    $start_label = \Drupal::service('date.formatter')->format((int) $appointment->get('start_time')->value, 'custom', 'Y-m-d H:i');
+    $site_name = \Drupal::config('system.site')->get('name') ?: 'ScheduleHub';
+    $date_label = \Drupal::service('date.formatter')->format(
+        (int) $appointment->get('start_time')->value,
+        'custom',
+        'd/m/Y \à H:i'
+    );
+    $manage_url = $params['manage_link'] ?? '/appointment/' . $appointment->id() . '/confirmation';
 
     $subject_map = [
-        'confirmation' => (string) $t->translate('Appointment confirmed - @site', ['@site' => $site_name]),
-        'modification' => (string) $t->translate('Appointment updated - @site', ['@site' => $site_name]),
-        'cancellation' => (string) $t->translate('Appointment cancelled - @site', ['@site' => $site_name]),
+        'confirmation' => (string) $t->translate('Rendez-vous confirmé - @site', ['@site' => $site_name]),
+        'modification' => (string) $t->translate('Rendez-vous modifié - @site', ['@site' => $site_name]),
+        'cancellation' => (string) $t->translate('Rendez-vous annulé - @site', ['@site' => $site_name]),
+        'reminder'     => (string) $t->translate('Rappel de rendez-vous - @site', ['@site' => $site_name]),
     ];
 
-    $body_map = [
-        'confirmation' => (string) $t->translate('Your appointment is confirmed for @date.', ['@date' => $start_label]),
-        'modification' => (string) $t->translate('Your appointment has been modified. New date: @date.', ['@date' => $start_label]),
-        'cancellation' => (string) $t->translate('Your appointment on @date has been cancelled.', ['@date' => $start_label]),
+    $theme_map = [
+        'confirmation' => 'appointment_email_confirmation',
+        'modification' => 'appointment_email_modification',
+        'cancellation' => 'appointment_email_cancellation',
+        'reminder'     => 'appointment_email_reminder',
     ];
 
-    $message['subject'] = $subject_map[$key] ?? (string) $t->translate('Appointment update');
-    $message['body'][] = $body_map[$key] ?? (string) $t->translate('Your appointment has been updated.');
+    $message['subject'] = $subject_map[$key] ?? (string) $t->translate('Mise à jour du rendez-vous');
 
-    if (!empty($params['manage_link'])) {
-        $message['body'][] = (string) $t->translate('Manage your appointment here: @url', ['@url' => $params['manage_link']]);
+    // Render the HTML template.
+    $theme_hook = $theme_map[$key] ?? NULL;
+    if ($theme_hook) {
+        $build = [
+            '#theme' => $theme_hook,
+            '#appointment' => $appointment,
+            '#site_name' => $site_name,
+            '#manage_url' => $manage_url,
+            '#date_label' => $date_label,
+        ];
+        if ($key === 'reminder' && isset($params['hours_until'])) {
+            $build['#hours_until'] = $params['hours_until'];
+        }
+        /** @var \Drupal\Core\Render\RendererInterface $renderer */
+        $renderer = \Drupal::service('renderer');
+        $html = (string) $renderer->renderPlain($build);
+        $message['body'][] = $html;
+        $message['headers']['Content-Type'] = 'text/html; charset=UTF-8';
+    } else {
+        $message['body'][] = (string) $t->translate('Votre rendez-vous a été mis à jour.');
     }
+}
+
+/**
+ * Implements hook_cron().
+ *
+ * Queues reminder emails for upcoming appointments.
+ */
+function appointment_cron(): void
+{
+    $config = \Drupal::config('appointment.settings');
+    $hours_before = (int) ($config->get('reminder_hours_before') ?? 24);
+    if ($hours_before <= 0) {
+        return;
+    }
+
+    $now = \Drupal::time()->getRequestTime();
+    $reminder_window = $now + ($hours_before * 3600);
+
+    // Find booked/confirmed appointments within the reminder window
+    // that haven't had a reminder sent yet.
+    $ids = \Drupal::entityQuery('appointment')
+        ->accessCheck(FALSE)
+        ->condition('status', ['booked', 'confirmed'], 'IN')
+        ->condition('start_time', $now, '>')
+        ->condition('start_time', $reminder_window, '<=')
+        ->condition('reminder_sent', 0)
+        ->execute();
+
+    if (empty($ids)) {
+        return;
+    }
+
+    /** @var \Drupal\appointment\Service\EmailService $email_service */
+    $email_service = \Drupal::service('appointment.email_service');
+
+    $appointments = \Drupal::entityTypeManager()
+        ->getStorage('appointment')
+        ->loadMultiple($ids);
+
+    foreach ($appointments as $appointment) {
+        /** @var \Drupal\appointment\Entity\AppointmentEntity $appointment */
+        $start = (int) $appointment->get('start_time')->value;
+        $hours_until = max(1, (int) round(($start - $now) / 3600));
+
+        $email_service->queueAppointmentEmail(
+            (int) $appointment->id(),
+            'reminder',
+            ['hours_until' => $hours_until],
+        );
+
+        // Mark reminder as sent to avoid duplicates.
+        $appointment->set('reminder_sent', TRUE);
+        $appointment->save();
+    }
+
+    \Drupal::logger('appointment')->info('Queued @count reminder emails.', [
+        '@count' => count($ids),
+    ]);
 }

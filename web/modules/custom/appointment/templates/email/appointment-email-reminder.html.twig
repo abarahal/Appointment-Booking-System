@@ -1,0 +1,57 @@
+{#
+ # Email template for appointment reminder.
+ #
+ # Variables:
+ #   - appointment: The appointment entity.
+ #   - site_name: The site name.
+ #   - manage_url: URL to manage appointments.
+ #   - date_label: Formatted date/time string.
+ #   - hours_until: Hours remaining until appointment.
+ #}
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: #17a2b8; color: #fff; padding: 20px; border-radius: 6px 6px 0 0; text-align: center;">
+    <h1 style="margin: 0; font-size: 22px;">&#128276; {{ 'Rappel de votre rendez-vous'|t }}</h1>
+  </div>
+
+  <div style="border: 1px solid #ddd; border-top: none; padding: 20px; border-radius: 0 0 6px 6px;">
+    <p>{{ 'Bonjour'|t }} <strong>{{ appointment.client_name.value }}</strong>,</p>
+
+    <p>{{ 'Nous vous rappelons que vous avez un rendez-vous prévu prochainement.'|t }}</p>
+
+    <div style="background: #e8f4f8; border-left: 4px solid #17a2b8; padding: 15px; margin: 15px 0; border-radius: 0 4px 4px 0;">
+      <strong style="font-size: 18px;">{{ date_label }}</strong>
+      {% if hours_until %}
+        <br><span style="color: #666;">{{ 'Dans environ @hours heures'|t({'@hours': hours_until}) }}</span>
+      {% endif %}
+    </div>
+
+    <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
+      <tr>
+        <td style="padding: 8px; border-bottom: 1px solid #eee; color: #666; width: 40%;">{{ 'Référence'|t }}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>#{{ appointment.id.value }}</strong></td>
+      </tr>
+      <tr>
+        <td style="padding: 8px; border-bottom: 1px solid #eee; color: #666;">{{ 'Agence'|t }}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #eee;">{{ appointment.agency.entity.label }}</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px; border-bottom: 1px solid #eee; color: #666;">{{ 'Conseiller'|t }}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #eee;">{{ appointment.adviser_name.value }}</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px; border-bottom: 1px solid #eee; color: #666;">{{ 'Type'|t }}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #eee;">{{ appointment.appointment_type.entity.label }}</td>
+      </tr>
+    </table>
+
+    <p style="text-align: center; margin: 25px 0;">
+      <a href="{{ manage_url }}" style="background: #0074bd; color: #fff; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block;">
+        {{ 'Gérer mon rendez-vous'|t }}
+      </a>
+    </p>
+
+    <p style="color: #999; font-size: 12px; margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px;">
+      {{ 'Ce message a été envoyé automatiquement par'|t }} {{ site_name }}.
+    </p>
+  </div>
+</div>

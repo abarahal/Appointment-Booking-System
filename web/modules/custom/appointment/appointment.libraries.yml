@@ -1,0 +1,45 @@
+appointment.frontend:
+  version: 1.x
+  js:
+    js/appointment.dialog_stack.js: {}
+  dependencies:
+    - core/drupal
+    - core/drupal.ajax
+    - core/drupal.dialog.ajax
+    - core/drupalSettings
+    - core/jquery
+
+fullcalendar:
+  version: 6.x
+  remote: https://fullcalendar.io
+  license:
+    name: MIT
+    url: https://github.com/fullcalendar/fullcalendar/blob/main/LICENSE.md
+    gpl-compatible: true
+  js:
+    https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js:
+      type: external
+      minified: true
+  css:
+    theme: {}
+
+appointment.calendar:
+  version: 1.x
+  js:
+    js/appointment.calendar.js: {}
+  css:
+    component:
+      css/appointment.calendar.css: {}
+  dependencies:
+    - core/drupal
+    - core/drupalSettings
+    - core/once
+    - appointment/fullcalendar
+
+appointment.admin:
+  version: 1.x
+  css:
+    theme:
+      css/appointment.admin.css: {}
+  dependencies:
+    - core/drupal

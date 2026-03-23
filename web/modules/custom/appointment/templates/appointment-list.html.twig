@@ -1,0 +1,60 @@
+{#
+ # Appointment list template for user-facing "My Appointments" page.
+ #
+ # Variables:
+ #   - rows: Array of appointment data.
+ #   - filters: Active filter values.
+ #   - lookup_url: URL to the lookup form.
+ #}
+<div class="appointment-list">
+  <h2>{{ 'Mes rendez-vous'|t }}</h2>
+
+  {% if rows is empty %}
+    <div class="appointment-list__empty">
+      <p>{{ 'Aucun rendez-vous trouvé.'|t }}</p>
+      <a href="{{ path('appointment.book') }}" class="button button--primary">{{ 'Prendre un rendez-vous'|t }}</a>
+      <a href="{{ lookup_url }}" class="button">{{ 'Rechercher par email ou téléphone'|t }}</a>
+    </div>
+  {% else %}
+    <div class="appointment-list__actions">
+      <a href="{{ path('appointment.book') }}" class="button button--primary">{{ 'Nouveau rendez-vous'|t }}</a>
+      <a href="{{ lookup_url }}" class="button">{{ 'Nouvelle recherche'|t }}</a>
+    </div>
+
+    <table class="appointment-list__table">
+      <thead>
+        <tr>
+          <th>{{ '#'|t }}</th>
+          <th>{{ 'Agence'|t }}</th>
+          <th>{{ 'Conseiller'|t }}</th>
+          <th>{{ 'Type'|t }}</th>
+          <th>{{ 'Date et heure'|t }}</th>
+          <th>{{ 'Statut'|t }}</th>
+          <th>{{ 'Actions'|t }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr class="appointment-row appointment-row--{{ row.status }}">
+            <td>{{ row.id }}</td>
+            <td>{{ row.agency }}</td>
+            <td>{{ row.adviser }}</td>
+            <td>{{ row.type }}</td>
+            <td>{{ row.start_time }}</td>
+            <td>
+              <span class="appointment-status appointment-status--{{ row.status }}">
+                {{ row.status|capitalize }}
+              </span>
+            </td>
+            <td class="appointment-actions">
+              <a href="{{ row.edit_url }}" class="button button--small">{{ 'Modifier'|t }}</a>
+              {% if row.status != 'cancelled' %}
+                <a href="{{ row.cancel_url }}" class="button button--small button--danger">{{ 'Annuler'|t }}</a>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+</div>

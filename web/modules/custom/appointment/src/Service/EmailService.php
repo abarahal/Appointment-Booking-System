@@ -8,9 +8,10 @@ use Drupal\appointment\Entity\AppointmentEntity;
 use Drupal\Core\Language\LanguageManagerInterface;
 use Drupal\Core\Logger\LoggerChannelFactoryInterface;
 use Drupal\Core\Mail\MailManagerInterface;
+use Drupal\Core\Queue\QueueFactory;
 
 /**
- * Sends appointment transactional emails.
+ * Sends appointment transactional emails (direct or queued).
  */
 class EmailService
 {
@@ -22,12 +23,13 @@ class EmailService
         protected MailManagerInterface $mailManager,
         protected LoggerChannelFactoryInterface $loggerFactory,
         protected LanguageManagerInterface $languageManager,
+        protected QueueFactory $queueFactory,
     ) {}
 
     /**
-     * Sends an appointment email.
+     * Sends an appointment email immediately.
      */
-    public function sendAppointmentEmail(AppointmentEntity $appointment, string $mail_key): void
+    public function sendAppointmentEmail(AppointmentEntity $appointment, string $mail_key, array $extra_params = []): void
     {
         $to = (string) $appointment->get('client_email')->value;
         if ($to === '') {
@@ -37,15 +39,17 @@ class EmailService
         $langcode = $this->languageManager->getDefaultLanguage()->getId();
         $manage_link = '/appointment/' . $appointment->id() . '/confirmation';
 
+        $params = [
+            'appointment' => $appointment,
+            'manage_link' => $manage_link,
+        ] + $extra_params;
+
         $result = $this->mailManager->mail(
             'appointment',
             $mail_key,
             $to,
             $langcode,
-            [
-                'appointment' => $appointment,
-                'manage_link' => $manage_link,
-            ],
+            $params,
             NULL,
             TRUE
         );
@@ -56,5 +60,18 @@ class EmailService
                 '@id' => $appointment->id(),
             ]);
         }
+    }
+
+    /**
+     * Queues an appointment email for later processing.
+     */
+    public function queueAppointmentEmail(int $appointment_id, string $mail_key, array $extra_params = []): void
+    {
+        $queue = $this->queueFactory->get('appointment_email');
+        $queue->createItem([
+            'appointment_id' => $appointment_id,
+            'mail_key' => $mail_key,
+            'extra_params' => $extra_params,
+        ]);
     }
 }

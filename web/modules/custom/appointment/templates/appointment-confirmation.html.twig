@@ -1,0 +1,71 @@
+{#
+ # Appointment confirmation page template.
+ #
+ # Variables:
+ #   - appointment: The appointment entity.
+ #   - edit_url: URL to edit the appointment.
+ #   - cancel_url: URL to cancel the appointment.
+ #}
+<div class="appointment-confirmation">
+  <div class="appointment-confirmation__icon">&#10003;</div>
+  <h2>{{ 'Votre rendez-vous est confirmé !'|t }}</h2>
+
+  <div class="appointment-confirmation__details">
+    <table>
+      <tr>
+        <th>{{ 'Référence'|t }}</th>
+        <td>#{{ appointment.id.value }}</td>
+      </tr>
+      <tr>
+        <th>{{ 'Client'|t }}</th>
+        <td>{{ appointment.client_name.value }}</td>
+      </tr>
+      <tr>
+        <th>{{ 'Email'|t }}</th>
+        <td>{{ appointment.client_email.value }}</td>
+      </tr>
+      {% if appointment.client_phone.value %}
+      <tr>
+        <th>{{ 'Téléphone'|t }}</th>
+        <td>{{ appointment.client_phone.value }}</td>
+      </tr>
+      {% endif %}
+      <tr>
+        <th>{{ 'Agence'|t }}</th>
+        <td>{{ appointment.agency.entity.label }}</td>
+      </tr>
+      <tr>
+        <th>{{ 'Conseiller'|t }}</th>
+        <td>{{ appointment.adviser_name.value }}</td>
+      </tr>
+      <tr>
+        <th>{{ 'Type'|t }}</th>
+        <td>{{ appointment.appointment_type.entity.label }}</td>
+      </tr>
+      <tr>
+        <th>{{ 'Date et heure'|t }}</th>
+        <td>{{ appointment.start_time.value|date('d/m/Y H:i') }}</td>
+      </tr>
+      <tr>
+        <th>{{ 'Statut'|t }}</th>
+        <td>
+          <span class="appointment-status appointment-status--{{ appointment.status.value }}">
+            {{ appointment.status.value|capitalize }}
+          </span>
+        </td>
+      </tr>
+      {% if appointment.notes.value %}
+      <tr>
+        <th>{{ 'Notes'|t }}</th>
+        <td>{{ appointment.notes.value }}</td>
+      </tr>
+      {% endif %}
+    </table>
+  </div>
+
+  <div class="appointment-confirmation__actions">
+    <a href="{{ edit_url }}" class="button button--primary">{{ 'Modifier le rendez-vous'|t }}</a>
+    <a href="{{ cancel_url }}" class="button button--danger">{{ 'Annuler le rendez-vous'|t }}</a>
+    <a href="{{ path('appointment.lookup') }}" class="button">{{ 'Rechercher un rendez-vous'|t }}</a>
+  </div>
+</div>

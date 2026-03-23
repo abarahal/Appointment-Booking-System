@@ -1,0 +1,16 @@
+administer appointments:
+  title: "Administer appointments"
+  description: "View all appointments, export CSV, and manage settings."
+  restrict access: true
+
+view own appointments:
+  title: "View own appointments"
+  description: "View appointments linked to the current user account."
+
+book appointments:
+  title: "Book appointments"
+  description: "Create new appointment bookings."
+
+manage own appointments:
+  title: "Manage own appointments"
+  description: "Modify or cancel own appointments."

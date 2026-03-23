@@ -7,6 +7,7 @@ namespace Drupal\appointment\Controller;
 use Drupal\appointment\Entity\AppointmentEntity;
 use Drupal\Core\Controller\ControllerBase;
 use Drupal\Core\Url;
+use Symfony\Component\HttpFoundation\JsonResponse;
 
 /**
  * Controller for appointment pages.
@@ -31,12 +32,13 @@ class AppointmentController extends ControllerBase
     }
 
     /**
-     * List appointments for current user or email query.
+     * List appointments for current user or email/phone query.
      */
     public function myAppointments(): array
     {
         $account = $this->currentUser();
         $email = (string) $this->getRequest()->query->get('email', '');
+        $phone = (string) $this->getRequest()->query->get('phone', '');
         $type_tid = (int) $this->getRequest()->query->get('type', 0);
 
         $query = $this->entityTypeManager()->getStorage('appointment')->getQuery()->accessCheck(FALSE)->sort('start_time', 'DESC');
@@ -44,6 +46,8 @@ class AppointmentController extends ControllerBase
             $query->condition('uid', (int) $account->id());
         } elseif ($email !== '') {
             $query->condition('client_email', $email);
+        } elseif ($phone !== '') {
+            $query->condition('client_phone', $phone);
         } else {
             return [
                 '#markup' => (string) $this->t('For anonymous users, open the lookup form to view appointments.'),
@@ -90,6 +94,54 @@ class AppointmentController extends ControllerBase
                 'library' => ['appointment/appointment.frontend'],
             ],
         ];
+    }
+
+    /**
+     * Returns booked slots for an adviser as JSON.
+     */
+    public function bookedSlots(): JsonResponse
+    {
+        $request = $this->getRequest();
+        $adviser_email = (string) $request->query->get('adviser_email', '');
+        $range_start = (string) $request->query->get('start', '');
+        $range_end = (string) $request->query->get('end', '');
+        $exclude_id = (int) $request->query->get('exclude_id', 0);
+
+        if ($adviser_email === '' || $range_start === '' || $range_end === '') {
+            return new JsonResponse([]);
+        }
+
+        $start_ts = strtotime($range_start);
+        $end_ts = strtotime($range_end);
+        if (!$start_ts || !$end_ts) {
+            return new JsonResponse([]);
+        }
+
+        $query = $this->entityTypeManager()->getStorage('appointment')->getQuery()
+            ->accessCheck(FALSE)
+            ->condition('adviser_email', $adviser_email)
+            ->condition('status', 'booked')
+            ->condition('start_time', $start_ts, '>=')
+            ->condition('end_time', $end_ts, '<=');
+
+        if ($exclude_id > 0) {
+            $query->condition('id', $exclude_id, '<>');
+        }
+
+        $ids = $query->execute();
+        $slots = [];
+
+        if ($ids) {
+            /** @var \Drupal\appointment\Entity\AppointmentEntity $appt */
+            foreach ($this->entityTypeManager()->getStorage('appointment')->loadMultiple($ids) as $appt) {
+                $slots[] = [
+                    'start' => date('c', (int) $appt->get('start_time')->value),
+                    'end' => date('c', (int) $appt->get('end_time')->value),
+                ];
+            }
+        }
+
+        return new JsonResponse($slots);
     }
 
     /**

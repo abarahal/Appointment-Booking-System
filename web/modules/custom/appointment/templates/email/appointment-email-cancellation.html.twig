@@ -1,0 +1,53 @@
+{#
+ # Email template for appointment cancellation.
+ #
+ # Variables:
+ #   - appointment: The appointment entity.
+ #   - site_name: The site name.
+ #   - manage_url: URL to rebook.
+ #   - date_label: Formatted date/time string.
+ #}
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: #dc3545; color: #fff; padding: 20px; border-radius: 6px 6px 0 0; text-align: center;">
+    <h1 style="margin: 0; font-size: 22px;">&#10007; {{ 'Rendez-vous annulé'|t }}</h1>
+  </div>
+
+  <div style="border: 1px solid #ddd; border-top: none; padding: 20px; border-radius: 0 0 6px 6px;">
+    <p>{{ 'Bonjour'|t }} <strong>{{ appointment.client_name.value }}</strong>,</p>
+
+    <p>{{ 'Votre rendez-vous a bien été annulé.'|t }}</p>
+
+    <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
+      <tr>
+        <td style="padding: 8px; border-bottom: 1px solid #eee; color: #666; width: 40%;">{{ 'Référence'|t }}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>#{{ appointment.id.value }}</strong></td>
+      </tr>
+      <tr>
+        <td style="padding: 8px; border-bottom: 1px solid #eee; color: #666;">{{ 'Agence'|t }}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #eee;">{{ appointment.agency.entity.label }}</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px; border-bottom: 1px solid #eee; color: #666;">{{ 'Conseiller'|t }}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #eee;">{{ appointment.adviser_name.value }}</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px; border-bottom: 1px solid #eee; color: #666;">{{ 'Date prévue'|t }}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #eee; text-decoration: line-through;">{{ date_label }}</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px; border-bottom: 1px solid #eee; color: #666;">{{ 'Statut'|t }}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #eee; color: #dc3545; font-weight: bold;">{{ 'Annulé'|t }}</td>
+      </tr>
+    </table>
+
+    <p style="text-align: center; margin: 25px 0;">
+      <a href="{{ manage_url }}" style="background: #0074bd; color: #fff; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block;">
+        {{ 'Reprendre un nouveau rendez-vous'|t }}
+      </a>
+    </p>
+
+    <p style="color: #999; font-size: 12px; margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px;">
+      {{ 'Ce message a été envoyé automatiquement par'|t }} {{ site_name }}.
+    </p>
+  </div>
+</div>

@@ -87,6 +87,7 @@ class ComposerStaticInit912487cae028eb1c5b00467a134e77d4
             'Psr\\Container\\' => 14,
             'PhpParser\\' => 10,
             'Peast\\' => 6,
+            'PHPMailer\\PHPMailer\\' => 20,
         ),
         'M' => 
         array (
@@ -316,6 +317,10 @@ class ComposerStaticInit912487cae028eb1c5b00467a134e77d4
         'Peast\\' => 
         array (
             0 => __DIR__ . '/..' . '/mck89/peast/lib/Peast',
+        ),
+        'PHPMailer\\PHPMailer\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/phpmailer/phpmailer/src',
         ),
         'Masterminds\\' => 
         array (

@@ -1,0 +1,6 @@
+appointment.admin_dashboard:
+  title: "Appointment Management"
+  description: "Manage appointments, view listings, and configure settings."
+  route_name: appointment.admin_dashboard
+  parent: system.admin_structure
+  weight: 10

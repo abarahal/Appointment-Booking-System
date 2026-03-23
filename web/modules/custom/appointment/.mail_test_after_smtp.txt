@@ -1,0 +1,2 @@
+MAIL_RESULT=1
+TO=ayoubbarahal2@gmail.com

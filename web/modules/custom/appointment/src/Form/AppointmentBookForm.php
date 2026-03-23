@@ -105,17 +105,28 @@ class AppointmentBookForm extends FormBase
                 break;
 
             case 4:
+                $adviser_email = (string) ($data['adviser_email'] ?? '');
+                $exclude_id = $appointment?->id() ? (int) $appointment->id() : NULL;
+
+                $form['wizard']['calendar_container'] = [
+                    '#type' => 'markup',
+                    '#markup' => '<div id="appointment-selection-display">' . $this->t('Click a time slot on the calendar to select your appointment.') . '</div><div id="appointment-fullcalendar"></div>',
+                ];
                 $form['wizard']['appointment_date'] = [
-                    '#type' => 'date',
-                    '#title' => $this->t('Choose date'),
-                    '#required' => TRUE,
+                    '#type' => 'hidden',
                     '#default_value' => $data['appointment_date'] ?? '',
+                    '#attributes' => ['id' => 'edit-appointment-date'],
                 ];
                 $form['wizard']['appointment_time'] = [
-                    '#type' => 'textfield',
-                    '#title' => $this->t('Choose time (HH:MM)'),
-                    '#required' => TRUE,
+                    '#type' => 'hidden',
                     '#default_value' => $data['appointment_time'] ?? '',
+                    '#attributes' => ['id' => 'edit-appointment-time'],
+                ];
+                $form['#attached']['library'][] = 'appointment/appointment.calendar';
+                $form['#attached']['drupalSettings']['appointmentCalendar'] = [
+                    'adviserEmail' => $adviser_email,
+                    'bookedSlotsUrl' => \Drupal\Core\Url::fromRoute('appointment.api_booked_slots')->toString(),
+                    'excludeId' => $exclude_id,
                 ];
                 break;
 
@@ -196,13 +207,19 @@ class AppointmentBookForm extends FormBase
         }
 
         if ($step === 4) {
+            $date = (string) $form_state->getValue('appointment_date');
             $time = (string) $form_state->getValue('appointment_time');
+
+            if ($date === '' || $time === '') {
+                $form_state->setErrorByName('appointment_date', $this->t('Please select a date and time on the calendar.'));
+                return;
+            }
+
             if (!preg_match('/^(2[0-3]|[01]\d):[0-5]\d$/', $time)) {
                 $form_state->setErrorByName('appointment_time', $this->t('Time must use HH:MM format.'));
                 return;
             }
 
-            $date = (string) $form_state->getValue('appointment_date');
             $start = strtotime($date . ' ' . $time);
             if (!$start) {
                 $form_state->setErrorByName('appointment_date', $this->t('Invalid date/time.'));

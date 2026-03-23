@@ -1,0 +1,44 @@
+#appointment-fullcalendar {
+  max-width: 960px;
+  margin: 0 auto 1.5rem;
+}
+
+#appointment-selection-display {
+  text-align: center;
+  font-size: 1.1rem;
+  font-weight: 600;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  border-radius: 4px;
+  background: #f0f0f0;
+  color: #333;
+  transition:
+    background 0.3s ease,
+    color 0.3s ease;
+}
+
+#appointment-selection-display.appointment-selection-confirmed {
+  background: #27ae60;
+  color: #fff;
+}
+
+.appointment-booked-slot {
+  opacity: 0.6;
+}
+
+.appointment-selected-slot {
+  border-radius: 4px;
+}
+
+.appointment-calendar-hidden-fields {
+  display: none;
+}
+
+.fc .fc-timegrid-slot {
+  height: 3em;
+}
+
+.fc .fc-col-header-cell-cushion,
+.fc .fc-daygrid-day-number {
+  font-weight: 600;
+}

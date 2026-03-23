@@ -89,3 +89,53 @@ appointment.lookup:
     _title: "Find my appointments"
   requirements:
     _access: "TRUE"
+
+appointment.api_booked_slots:
+  path: "/appointment/api/booked-slots"
+  defaults:
+    _controller: '\Drupal\appointment\Controller\AppointmentController::bookedSlots'
+  requirements:
+    _access: "TRUE"
+  options:
+    no_cache: TRUE
+
+# --- Admin routes ---
+
+appointment.admin_dashboard:
+  path: "/admin/structure/appointment"
+  defaults:
+    _controller: '\Drupal\appointment\Controller\AppointmentAdminController::dashboard'
+    _title: "Appointment Management"
+  requirements:
+    _permission: "administer appointments"
+
+appointment.admin_list:
+  path: "/admin/structure/appointment/list"
+  defaults:
+    _controller: '\Drupal\appointment\Controller\AppointmentAdminController::listAppointments'
+    _title: "All Appointments"
+  requirements:
+    _permission: "administer appointments"
+
+appointment.admin_export_csv:
+  path: "/admin/structure/appointment/export"
+  defaults:
+    _form: '\Drupal\appointment\Form\AppointmentExportForm'
+    _title: "Export Appointments to CSV"
+  requirements:
+    _permission: "administer appointments"
+
+appointment.admin_download_csv:
+  path: "/admin/structure/appointment/download-csv"
+  defaults:
+    _controller: '\Drupal\appointment\Controller\AppointmentAdminController::downloadCsv'
+  requirements:
+    _permission: "administer appointments"
+
+appointment.admin_settings:
+  path: "/admin/structure/appointment/settings"
+  defaults:
+    _form: '\Drupal\appointment\Form\AppointmentSettingsForm'
+    _title: "Appointment Settings"
+  requirements:
+    _permission: "administer appointments"

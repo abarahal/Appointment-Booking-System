@@ -93,7 +93,11 @@ class AppointmentEntity extends ContentEntityBase
         $fields['status'] = BaseFieldDefinition::create('list_string')
             ->setLabel(new TranslatableMarkup('Status'))
             ->setRequired(TRUE)
-            ->setSettings(['allowed_values' => ['booked' => 'Booked', 'cancelled' => 'Cancelled']])
+            ->setSettings(['allowed_values' => [
+                'booked' => 'Booked',
+                'confirmed' => 'Confirmed',
+                'cancelled' => 'Cancelled',
+            ]])
             ->setDefaultValue('booked');
 
         $fields['access_token'] = BaseFieldDefinition::create('string')
@@ -106,6 +110,10 @@ class AppointmentEntity extends ContentEntityBase
 
         $fields['changed'] = BaseFieldDefinition::create('changed')
             ->setLabel(new TranslatableMarkup('Changed'));
+
+        $fields['reminder_sent'] = BaseFieldDefinition::create('boolean')
+            ->setLabel(new TranslatableMarkup('Reminder sent'))
+            ->setDefaultValue(FALSE);
 
         return $fields;
     }
