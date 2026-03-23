@@ -1,0 +1,91 @@
+appointment.book:
+  path: "/appointment/book"
+  defaults:
+    _form: '\Drupal\appointment\Form\AppointmentBookForm'
+    _title: "Book appointment"
+  requirements:
+    _access: "TRUE"
+
+appointment.book_slash:
+  path: "/appointment/book/"
+  defaults:
+    _form: '\Drupal\appointment\Form\AppointmentBookForm'
+    _title: "Book appointment"
+  requirements:
+    _access: "TRUE"
+
+appointment.book_step:
+  path: "/appointment/book/{step}"
+  defaults:
+    _form: '\Drupal\appointment\Form\AppointmentBookForm'
+    _title: "Book appointment"
+    step: 1
+  requirements:
+    _access: "TRUE"
+    step: '\d+'
+
+appointment.edit:
+  path: "/appointment/{appointment}/edit"
+  defaults:
+    _form: '\Drupal\appointment\Form\AppointmentBookForm'
+    _title: "Modify appointment"
+  requirements:
+    _access: "TRUE"
+  options:
+    parameters:
+      appointment:
+        type: entity:appointment
+
+appointment.edit_step:
+  path: "/appointment/{appointment}/edit/{step}"
+  defaults:
+    _form: '\Drupal\appointment\Form\AppointmentBookForm'
+    _title: "Modify appointment"
+    step: 1
+  requirements:
+    _access: "TRUE"
+    step: '\d+'
+  options:
+    parameters:
+      appointment:
+        type: entity:appointment
+
+appointment.cancel:
+  path: "/appointment/{appointment}/cancel"
+  defaults:
+    _form: '\Drupal\appointment\Form\AppointmentCancelForm'
+    _title: "Cancel appointment"
+  requirements:
+    _access: "TRUE"
+  options:
+    parameters:
+      appointment:
+        type: entity:appointment
+
+appointment.confirmation:
+  path: "/appointment/{appointment}/confirmation"
+  defaults:
+    _controller: '\Drupal\appointment\Controller\AppointmentController::confirmation'
+    _title: "Appointment confirmation"
+  requirements:
+    _access: "TRUE"
+  options:
+    parameters:
+      appointment:
+        type: entity:appointment
+
+appointment.my_appointments:
+  path: "/appointment/my"
+  defaults:
+    _controller: '\Drupal\appointment\Controller\AppointmentController::myAppointments'
+    _title: "My appointments"
+  requirements:
+    _access: "TRUE"
+
+appointment.lookup:
+  path: "/appointment/lookup"
+  defaults:
+    _form: '\Drupal\appointment\Form\AppointmentLookupForm'
+    _title: "Find my appointments"
+  requirements:
+    _access: "TRUE"

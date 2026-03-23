@@ -1,0 +1,10 @@
+name: Appointment Booking System
+type: module
+description: 'Sprint 1 client-facing appointment booking for anonymous and authenticated users.'
+package: Custom
+core_version_requirement: ^10
+dependencies:
+  - drupal:user
+  - drupal:options
+  - drupal:taxonomy
+  - drupal:datetime

@@ -1,0 +1,143 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "drush-route-check",
+			"type": "shell",
+			"command": "./vendor/bin/drush route:list --path=/appointment/book",
+			"isBackground": false
+		},
+		{
+			"label": "drush-appointment-diagnose",
+			"type": "shell",
+			"command": "./vendor/bin/drush php:eval \"echo 'module=' . (int) \\Drupal::moduleHandler()->moduleExists('appointment') . PHP_EOL; $r=\\Drupal::service('router.route_provider')->getRoutesByNames(['appointment.book']); echo 'route_count=' . count($r) . PHP_EOL;\"",
+			"isBackground": false
+		},
+		{
+			"label": "drush-enable-appointment",
+			"type": "shell",
+			"command": "./vendor/bin/drush en appointment -y && ./vendor/bin/drush cr",
+			"isBackground": false
+		},
+		{
+			"label": "drush-check-core-extension",
+			"type": "shell",
+			"command": "./vendor/bin/drush cget core.extension module.appointment",
+			"isBackground": false
+		},
+		{
+			"label": "appointment-lint",
+			"type": "shell",
+			"command": "find web/modules/custom/appointment/src -name '*.php' -print0 | xargs -0 -n1 php -l",
+			"isBackground": false
+		},
+		{
+			"label": "appointment-drush-cr",
+			"type": "shell",
+			"command": "./vendor/bin/drush cr",
+			"isBackground": false
+		},
+		{
+			"label": "appointment-drush-cr-fix-controller",
+			"type": "shell",
+			"command": "./vendor/bin/drush cr",
+			"isBackground": false
+		},
+		{
+			"label": "appointment-class-check",
+			"type": "shell",
+			"command": "./vendor/bin/drush ev \"var_dump(class_exists('Drupal\\\\appointment\\\\Controller\\\\AppointmentController'));\"",
+			"isBackground": false
+		},
+		{
+			"label": "appointment-route-check",
+			"type": "shell",
+			"command": "./vendor/bin/drush ev \"$route = \\\\Drupal::service('router.route_provider')->getRouteByName('appointment.confirmation'); echo $route->getDefault('_controller') . PHP_EOL;\"",
+			"isBackground": false
+		},
+		{
+			"label": "appointment-watchdog-tail",
+			"type": "shell",
+			"command": "./vendor/bin/drush ws --count=20",
+			"isBackground": false
+		},
+		{
+			"label": "appointment-drush-cr-verbose",
+			"type": "shell",
+			"command": "./vendor/bin/drush cr -vvv",
+			"isBackground": false
+		},
+		{
+			"label": "appointment-php-lint-controller",
+			"type": "shell",
+			"command": "php -l web/modules/custom/appointment/src/Controller/AppointmentController.php && php -l web/modules/custom/appointment/src/Form/AppointmentBookForm.php",
+			"isBackground": false
+		},
+		{
+			"label": "appointment-class-exists-safe",
+			"type": "shell",
+			"command": "./vendor/bin/drush php:eval 'var_dump(class_exists(\"Drupal\\\\appointment\\\\Controller\\\\AppointmentController\"));'",
+			"isBackground": false
+		},
+		{
+			"label": "appointment-check-tables",
+			"type": "shell",
+			"command": "./vendor/bin/drush sqlq \"SHOW TABLES LIKE 'agency'; SHOW TABLES LIKE 'appointment';\"",
+			"isBackground": false
+		},
+		{
+			"label": "appointment-remove-empty-folders",
+			"type": "shell",
+			"command": "rmdir web/modules/custom/appointment/src/Access web/modules/custom/appointment/src/ListBuilder web/modules/custom/appointment/src/Plugin/Block web/modules/custom/appointment/src/Plugin/QueueWorker web/modules/custom/appointment/src/Plugin web/modules/custom/appointment/config/install web/modules/custom/appointment/config/optional web/modules/custom/appointment/css web/modules/custom/appointment/js web/modules/custom/appointment/templates web/modules/custom/appointment/tests/src/Kernel web/modules/custom/appointment/tests/src web/modules/custom/appointment/tests web/modules/custom/appointment/data web/modules/custom/appointment/config",
+			"isBackground": false
+		},
+		{
+			"label": "appointment-rebuild-after-wizard",
+			"type": "shell",
+			"command": "./vendor/bin/drush cr",
+			"isBackground": false
+		},
+		{
+			"label": "appointment-cr-after-slash-route",
+			"type": "shell",
+			"command": "./vendor/bin/drush cr",
+			"isBackground": false
+		},
+		{
+			"label": "appointment-diag-tables-file",
+			"type": "shell",
+			"command": "./vendor/bin/drush sqlq \"SHOW TABLES LIKE 'agency'; SHOW TABLES LIKE 'appointment';\" > web/modules/custom/appointment/.diag_tables.txt 2>&1",
+			"isBackground": false
+		},
+		{
+			"label": "appointment-diag-watchdog-file",
+			"type": "shell",
+			"command": "./vendor/bin/drush ws --count=30 --format=json > web/modules/custom/appointment/.diag_watchdog.json 2>&1",
+			"isBackground": false
+		},
+		{
+			"label": "appointment-fix-entity-schema",
+			"type": "shell",
+			"command": "./vendor/bin/drush updb -y > web/modules/custom/appointment/.diag_updb.txt 2>&1; ./vendor/bin/drush entup -y >> web/modules/custom/appointment/.diag_updb.txt 2>&1 || ./vendor/bin/drush entity:updates -y >> web/modules/custom/appointment/.diag_updb.txt 2>&1; ./vendor/bin/drush cr >> web/modules/custom/appointment/.diag_updb.txt 2>&1; ./vendor/bin/drush sqlq \"SHOW TABLES LIKE 'agency'; SHOW TABLES LIKE 'appointment';\" > web/modules/custom/appointment/.diag_tables_after.txt 2>&1",
+			"isBackground": false
+		},
+		{
+			"label": "appointment-reinstall-module",
+			"type": "shell",
+			"command": "./vendor/bin/drush pm:uninstall appointment -y > web/modules/custom/appointment/.diag_reinstall.txt 2>&1; ./vendor/bin/drush en appointment -y >> web/modules/custom/appointment/.diag_reinstall.txt 2>&1; ./vendor/bin/drush cr >> web/modules/custom/appointment/.diag_reinstall.txt 2>&1; ./vendor/bin/drush sqlq \"SELECT 'agency', COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'agency' UNION ALL SELECT 'appointment', COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'appointment';\" > web/modules/custom/appointment/.diag_tables_after_reinstall.txt 2>&1",
+			"isBackground": false
+		},
+		{
+			"label": "appointment-watchdog-after-reinstall",
+			"type": "shell",
+			"command": "./vendor/bin/drush ws --count=8 --format=json > web/modules/custom/appointment/.diag_watchdog_after_reinstall.json 2>&1",
+			"isBackground": false
+		},
+		{
+			"label": "appointment-run-update-hook",
+			"type": "shell",
+			"command": "./vendor/bin/drush updb -y > web/modules/custom/appointment/.diag_updb_after_hook.txt 2>&1; ./vendor/bin/drush cr >> web/modules/custom/appointment/.diag_updb_after_hook.txt 2>&1; ./vendor/bin/drush sqlq \"SELECT 'agency', COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'agency' UNION ALL SELECT 'appointment', COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'appointment';\" > web/modules/custom/appointment/.diag_tables_final.txt 2>&1",
+			"isBackground": false
+		}
+	]
+}

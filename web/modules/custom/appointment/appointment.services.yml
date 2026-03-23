@@ -1,0 +1,8 @@
+services:
+  appointment.manager:
+    class: Drupal\appointment\Service\AppointmentManagerService
+    arguments: ['@entity_type.manager', '@date.formatter', '@datetime.time']
+
+  appointment.email_service:
+    class: Drupal\appointment\Service\EmailService
+    arguments: ['@plugin.manager.mail', '@logger.factory', '@language_manager']

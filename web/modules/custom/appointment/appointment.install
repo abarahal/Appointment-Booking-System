@@ -1,0 +1,187 @@
+<?php
+
+declare(strict_types=1);
+
+use Drupal\appointment\Entity\AgencyEntity;
+use Drupal\appointment\Entity\AppointmentEntity;
+use Drupal\Core\Database\Database;
+use Drupal\taxonomy\Entity\Term;
+use Drupal\taxonomy\Entity\Vocabulary;
+
+/**
+ * Implements hook_install().
+ */
+function appointment_install(): void
+{
+    if (!Vocabulary::load('appointment_type')) {
+        Vocabulary::create([
+            'vid' => 'appointment_type',
+            'name' => 'Appointment types',
+            'description' => 'Types used by the appointment booking form.',
+        ])->save();
+    }
+
+    $type_names = ['Consultation', 'Follow-up', 'Support'];
+    foreach ($type_names as $type_name) {
+        $exists = \Drupal::entityQuery('taxonomy_term')
+            ->accessCheck(FALSE)
+            ->condition('vid', 'appointment_type')
+            ->condition('name', $type_name)
+            ->range(0, 1)
+            ->execute();
+
+        if (!$exists) {
+            Term::create([
+                'vid' => 'appointment_type',
+                'name' => $type_name,
+            ])->save();
+        }
+    }
+
+    $agency_storage = \Drupal::entityTypeManager()->getStorage('agency');
+    $has_agency = $agency_storage->getQuery()->accessCheck(FALSE)->range(0, 1)->execute();
+    if (!$has_agency) {
+        $agencies = [
+            [
+                'name' => 'Central Agency',
+                'address' => '123 Main Street',
+                'advisers' => [
+                    ['name' => 'Alice Morgan', 'email' => 'alice@example.com'],
+                    ['name' => 'David Reed', 'email' => 'david@example.com'],
+                ],
+            ],
+            [
+                'name' => 'North Branch',
+                'address' => '77 North Avenue',
+                'advisers' => [
+                    ['name' => 'Rina Patel', 'email' => 'rina@example.com'],
+                    ['name' => 'Leo Grant', 'email' => 'leo@example.com'],
+                ],
+            ],
+        ];
+
+        foreach ($agencies as $agency_values) {
+            AgencyEntity::create([
+                'name' => $agency_values['name'],
+                'address' => $agency_values['address'],
+                'advisers' => json_encode($agency_values['advisers'], JSON_THROW_ON_ERROR),
+                'status' => TRUE,
+            ])->save();
+        }
+    }
+
+    $appointment_storage = \Drupal::entityTypeManager()->getStorage('appointment');
+    $has_appointments = $appointment_storage->getQuery()->accessCheck(FALSE)->range(0, 1)->execute();
+    if (!$has_appointments) {
+        $agencies = $agency_storage->loadMultiple();
+        $terms = \Drupal::entityTypeManager()->getStorage('taxonomy_term')->loadByProperties(['vid' => 'appointment_type']);
+        $type_term = $terms ? reset($terms) : NULL;
+        $agency = $agencies ? reset($agencies) : NULL;
+
+        if ($agency && $type_term) {
+            $start = \Drupal::time()->getRequestTime() + 86400;
+            AppointmentEntity::create([
+                'uid' => 0,
+                'agency' => $agency->id(),
+                'adviser_name' => 'Alice Morgan',
+                'adviser_email' => 'alice@example.com',
+                'appointment_type' => $type_term->id(),
+                'start_time' => $start,
+                'end_time' => $start + 3600,
+                'client_name' => 'Demo Client',
+                'client_email' => 'client@example.com',
+                'client_phone' => '0102030405',
+                'notes' => 'Sample appointment generated at install.',
+                'status' => 'booked',
+                'access_token' => hash('sha256', uniqid('appointment_', TRUE)),
+            ])->save();
+        }
+    }
+}
+
+/**
+ * Installs missing entity tables for legacy installs.
+ */
+function appointment_update_10001(): string
+{
+    $schema = Database::getConnection()->schema();
+    $entity_type_manager = \Drupal::entityTypeManager();
+    $update_manager = \Drupal::entityDefinitionUpdateManager();
+
+    foreach (['agency', 'appointment'] as $entity_type_id) {
+        if ($schema->tableExists($entity_type_id)) {
+            continue;
+        }
+
+        $definition = $entity_type_manager->getDefinition($entity_type_id);
+        $update_manager->installEntityType($definition);
+    }
+
+    return 'Installed missing appointment entity tables.';
+}
+
+/**
+ * Seeds agency and appointment type data if tables are empty.
+ */
+function appointment_update_10002(): string
+{
+    // Ensure vocabulary exists.
+    if (!\Drupal\taxonomy\Entity\Vocabulary::load('appointment_type')) {
+        \Drupal\taxonomy\Entity\Vocabulary::create([
+            'vid' => 'appointment_type',
+            'name' => 'Appointment types',
+            'description' => 'Types used by the appointment booking form.',
+        ])->save();
+    }
+
+    // Seed terms.
+    $type_names = ['Consultation', 'Follow-up', 'Support'];
+    foreach ($type_names as $type_name) {
+        $exists = \Drupal::entityQuery('taxonomy_term')
+            ->accessCheck(FALSE)
+            ->condition('vid', 'appointment_type')
+            ->condition('name', $type_name)
+            ->range(0, 1)
+            ->execute();
+        if (!$exists) {
+            \Drupal\taxonomy\Entity\Term::create([
+                'vid' => 'appointment_type',
+                'name' => $type_name,
+            ])->save();
+        }
+    }
+
+    // Seed agencies.
+    $agency_storage = \Drupal::entityTypeManager()->getStorage('agency');
+    $has_agency = $agency_storage->getQuery()->accessCheck(FALSE)->range(0, 1)->execute();
+    if (!$has_agency) {
+        $agencies = [
+            [
+                'name' => 'Central Agency',
+                'address' => '123 Main Street',
+                'advisers' => [
+                    ['name' => 'Alice Morgan', 'email' => 'alice@example.com'],
+                    ['name' => 'David Reed', 'email' => 'david@example.com'],
+                ],
+            ],
+            [
+                'name' => 'North Branch',
+                'address' => '77 North Avenue',
+                'advisers' => [
+                    ['name' => 'Rina Patel', 'email' => 'rina@example.com'],
+                    ['name' => 'Leo Grant', 'email' => 'leo@example.com'],
+                ],
+            ],
+        ];
+        foreach ($agencies as $vals) {
+            \Drupal\appointment\Entity\AgencyEntity::create([
+                'name' => $vals['name'],
+                'address' => $vals['address'],
+                'advisers' => json_encode($vals['advisers'], JSON_THROW_ON_ERROR),
+                'status' => TRUE,
+            ])->save();
+        }
+    }
+
+    return 'Seeded appointment types and agencies.';
+}

@@ -1,0 +1,68 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * @file
+ * Appointment module hooks.
+ */
+
+/**
+ * Implements hook_theme().
+ */
+function appointment_theme(array $existing, string $type, string $theme, string $path): array
+{
+    return [
+        'appointment_confirmation' => [
+            'variables' => [
+                'appointment' => NULL,
+                'edit_url' => NULL,
+                'cancel_url' => NULL,
+            ],
+            'template' => 'appointment-confirmation',
+        ],
+        'appointment_list' => [
+            'variables' => [
+                'rows' => [],
+                'filters' => [],
+                'lookup_url' => NULL,
+            ],
+            'template' => 'appointment-list',
+        ],
+    ];
+}
+
+/**
+ * Implements hook_mail().
+ */
+function appointment_mail(string $key, array &$message, array $params): void
+{
+    /** @var \Drupal\appointment\Entity\AppointmentEntity|null $appointment */
+    $appointment = $params['appointment'] ?? NULL;
+    if (!$appointment) {
+        return;
+    }
+
+    $t = \Drupal::translation();
+    $site_name = \Drupal::config('system.site')->get('name') ?: 'Drupal site';
+    $start_label = \Drupal::service('date.formatter')->format((int) $appointment->get('start_time')->value, 'custom', 'Y-m-d H:i');
+
+    $subject_map = [
+        'confirmation' => (string) $t->translate('Appointment confirmed - @site', ['@site' => $site_name]),
+        'modification' => (string) $t->translate('Appointment updated - @site', ['@site' => $site_name]),
+        'cancellation' => (string) $t->translate('Appointment cancelled - @site', ['@site' => $site_name]),
+    ];
+
+    $body_map = [
+        'confirmation' => (string) $t->translate('Your appointment is confirmed for @date.', ['@date' => $start_label]),
+        'modification' => (string) $t->translate('Your appointment has been modified. New date: @date.', ['@date' => $start_label]),
+        'cancellation' => (string) $t->translate('Your appointment on @date has been cancelled.', ['@date' => $start_label]),
+    ];
+
+    $message['subject'] = $subject_map[$key] ?? (string) $t->translate('Appointment update');
+    $message['body'][] = $body_map[$key] ?? (string) $t->translate('Your appointment has been updated.');
+
+    if (!empty($params['manage_link'])) {
+        $message['body'][] = (string) $t->translate('Manage your appointment here: @url', ['@url' => $params['manage_link']]);
+    }
+}
