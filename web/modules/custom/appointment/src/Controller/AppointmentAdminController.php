@@ -41,39 +41,12 @@ class AppointmentAdminController extends ControllerBase
     public function listAppointments(): array
     {
         $request = $this->requestStack->getCurrentRequest();
-        $filter_status = (string) ($request?->query->get('status') ?? '');
-        $filter_agency = (int) ($request?->query->get('agency') ?? 0);
-        $filter_adviser = (string) ($request?->query->get('adviser') ?? '');
-        $filter_date_from = (string) ($request?->query->get('date_from') ?? '');
-        $filter_date_to = (string) ($request?->query->get('date_to') ?? '');
 
         $query = $this->entityTypeManager()
             ->getStorage('appointment')
             ->getQuery()
             ->accessCheck(FALSE)
             ->sort('start_time', 'DESC');
-
-        if ($filter_status !== '') {
-            $query->condition('status', $filter_status);
-        }
-        if ($filter_agency > 0) {
-            $query->condition('agency', $filter_agency);
-        }
-        if ($filter_adviser !== '') {
-            $query->condition('adviser_email', $filter_adviser);
-        }
-        if ($filter_date_from !== '') {
-            $ts = strtotime($filter_date_from);
-            if ($ts) {
-                $query->condition('start_time', $ts, '>=');
-            }
-        }
-        if ($filter_date_to !== '') {
-            $ts = strtotime($filter_date_to . ' 23:59:59');
-            if ($ts) {
-                $query->condition('start_time', $ts, '<=');
-            }
-        }
 
         $count_query = clone $query;
         $total = count($count_query->execute());
@@ -104,17 +77,6 @@ class AppointmentAdminController extends ControllerBase
             ];
         }
 
-        // Build filter options.
-        $agency_options = ['' => $this->t('- All agencies -')];
-        $agency_ids = $this->entityTypeManager()->getStorage('agency')->getQuery()->accessCheck(FALSE)->condition('status', 1)->sort('name')->execute();
-        if ($agency_ids) {
-            foreach ($this->entityTypeManager()->getStorage('agency')->loadMultiple($agency_ids) as $agency) {
-                $agency_options[$agency->id()] = $agency->label();
-            }
-        }
-
-        $status_options = ['' => $this->t('- All statuses -'), 'booked' => $this->t('Booked'), 'confirmed' => $this->t('Confirmed'), 'cancelled' => $this->t('Cancelled')];
-
         $header = [
             $this->t('ID'),
             $this->t('Client'),
@@ -131,6 +93,14 @@ class AppointmentAdminController extends ControllerBase
         $table_rows = [];
         foreach ($rows as $row) {
             $actions = [];
+            if ($row['status'] === 'pending') {
+                $actions[] = [
+                    '#type' => 'link',
+                    '#title' => $this->t('Confirm'),
+                    '#url' => Url::fromRoute('appointment.admin_confirm', ['appointment' => $row['id']]),
+                    '#attributes' => ['class' => ['button', 'button--small', 'button--primary']],
+                ];
+            }
             $actions[] = [
                 '#type' => 'link',
                 '#title' => $this->t('Edit'),
@@ -162,48 +132,14 @@ class AppointmentAdminController extends ControllerBase
 
         $build = [];
 
-        // Filter form.
-        $build['filters'] = [
-            '#type' => 'details',
-            '#title' => $this->t('Filters'),
-            '#open' => ($filter_status !== '' || $filter_agency > 0 || $filter_adviser !== '' || $filter_date_from !== '' || $filter_date_to !== ''),
-            '#attributes' => ['class' => ['appointment-admin-filters']],
-        ];
-        $build['filters']['form'] = [
-            '#type' => 'container',
-            '#attributes' => ['class' => ['appointment-filter-form']],
-            'status' => [
-                '#type' => 'markup',
-                '#markup' => '<form method="get" class="appointment-filters-inline">'
-                    . '<label>' . $this->t('Status') . ': <select name="status">'
-                    . $this->buildSelectOptions($status_options, $filter_status)
-                    . '</select></label>'
-                    . '<label>' . $this->t('Agency') . ': <select name="agency">'
-                    . $this->buildSelectOptions($agency_options, (string) $filter_agency)
-                    . '</select></label>'
-                    . '<label>' . $this->t('Date from') . ': <input type="date" name="date_from" value="' . htmlspecialchars($filter_date_from, ENT_QUOTES) . '"></label>'
-                    . '<label>' . $this->t('Date to') . ': <input type="date" name="date_to" value="' . htmlspecialchars($filter_date_to, ENT_QUOTES) . '"></label>'
-                    . '<button type="submit" class="button">' . $this->t('Filter') . '</button>'
-                    . ' <a href="' . Url::fromRoute('appointment.admin_list')->toString() . '" class="button">' . $this->t('Reset') . '</a>'
-                    . '</form>',
-            ],
-        ];
-
         // Actions bar.
-        $export_params = array_filter([
-            'status' => $filter_status,
-            'agency' => $filter_agency ?: NULL,
-            'adviser' => $filter_adviser ?: NULL,
-            'date_from' => $filter_date_from ?: NULL,
-            'date_to' => $filter_date_to ?: NULL,
-        ]);
         $build['actions_bar'] = [
             '#type' => 'container',
             '#attributes' => ['class' => ['appointment-admin-actions']],
             'export' => [
                 '#type' => 'link',
                 '#title' => $this->t('Export CSV'),
-                '#url' => Url::fromRoute('appointment.admin_export_csv', [], ['query' => $export_params]),
+                '#url' => Url::fromRoute('appointment.admin_export_csv'),
                 '#attributes' => ['class' => ['button', 'button--primary']],
             ],
             'count' => [
@@ -234,6 +170,26 @@ class AppointmentAdminController extends ControllerBase
     }
 
     /**
+     * Confirms an appointment and sends the confirmation email.
+     */
+    public function confirmAppointment(AppointmentEntity $appointment): \Symfony\Component\HttpFoundation\RedirectResponse
+    {
+        if ($appointment->get('status')->value === 'pending') {
+            $appointment->set('status', 'confirmed');
+            $appointment->save();
+            \Drupal::service('appointment.email_service')->sendAppointmentEmail($appointment, 'confirmation');
+            $this->messenger()->addStatus($this->t('Appointment #@id has been confirmed and the client has been notified by email.', ['@id' => $appointment->id()]));
+        } else {
+            $this->messenger()->addWarning($this->t('Appointment #@id cannot be confirmed (current status: @status).', [
+                '@id' => $appointment->id(),
+                '@status' => $appointment->get('status')->value,
+            ]));
+        }
+
+        return $this->redirect('appointment.admin_list');
+    }
+
+    /**
      * Admin dashboard overview page.
      */
     public function dashboard(): array
@@ -241,7 +197,7 @@ class AppointmentAdminController extends ControllerBase
         $storage = $this->entityTypeManager()->getStorage('appointment');
 
         $total = count($storage->getQuery()->accessCheck(FALSE)->execute());
-        $booked = count($storage->getQuery()->accessCheck(FALSE)->condition('status', 'booked')->execute());
+        $pending = count($storage->getQuery()->accessCheck(FALSE)->condition('status', 'pending')->execute());
         $confirmed = count($storage->getQuery()->accessCheck(FALSE)->condition('status', 'confirmed')->execute());
         $cancelled = count($storage->getQuery()->accessCheck(FALSE)->condition('status', 'cancelled')->execute());
 
@@ -260,7 +216,7 @@ class AppointmentAdminController extends ControllerBase
                 '#type' => 'markup',
                 '#markup' => '<div class="appointment-stats">'
                     . '<div class="stat-card"><h3>' . $total . '</h3><p>' . $this->t('Total Appointments') . '</p></div>'
-                    . '<div class="stat-card stat-booked"><h3>' . $booked . '</h3><p>' . $this->t('Booked') . '</p></div>'
+                    . '<div class="stat-card stat-pending"><h3>' . $pending . '</h3><p>' . $this->t('Pending') . '</p></div>'
                     . '<div class="stat-card stat-confirmed"><h3>' . $confirmed . '</h3><p>' . $this->t('Confirmed') . '</p></div>'
                     . '<div class="stat-card stat-cancelled"><h3>' . $cancelled . '</h3><p>' . $this->t('Cancelled') . '</p></div>'
                     . '<div class="stat-card stat-today"><h3>' . $today_count . '</h3><p>' . $this->t('Today') . '</p></div>'
@@ -278,19 +234,6 @@ class AppointmentAdminController extends ControllerBase
                 'library' => ['appointment/appointment.admin'],
             ],
         ];
-    }
-
-    /**
-     * Builds HTML <option> tags for a select.
-     */
-    protected function buildSelectOptions(array $options, string $selected): string
-    {
-        $html = '';
-        foreach ($options as $value => $label) {
-            $sel = ((string) $value === $selected) ? ' selected' : '';
-            $html .= '<option value="' . htmlspecialchars((string) $value, ENT_QUOTES) . '"' . $sel . '>' . htmlspecialchars((string) $label, ENT_QUOTES) . '</option>';
-        }
-        return $html;
     }
 
     /**

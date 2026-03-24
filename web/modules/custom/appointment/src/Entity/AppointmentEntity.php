@@ -50,6 +50,11 @@ class AppointmentEntity extends ContentEntityBase
             ->setRequired(TRUE)
             ->setSetting('target_type', 'agency');
 
+        $fields['adviser'] = BaseFieldDefinition::create('entity_reference')
+            ->setLabel(new TranslatableMarkup('Adviser'))
+            ->setRequired(FALSE)
+            ->setSetting('target_type', 'adviser');
+
         $fields['adviser_name'] = BaseFieldDefinition::create('string')
             ->setLabel(new TranslatableMarkup('Adviser name'))
             ->setRequired(TRUE)
@@ -94,11 +99,11 @@ class AppointmentEntity extends ContentEntityBase
             ->setLabel(new TranslatableMarkup('Status'))
             ->setRequired(TRUE)
             ->setSettings(['allowed_values' => [
-                'booked' => 'Booked',
+                'pending' => 'Pending',
                 'confirmed' => 'Confirmed',
                 'cancelled' => 'Cancelled',
             ]])
-            ->setDefaultValue('booked');
+            ->setDefaultValue('pending');
 
         $fields['access_token'] = BaseFieldDefinition::create('string')
             ->setLabel(new TranslatableMarkup('Access token'))

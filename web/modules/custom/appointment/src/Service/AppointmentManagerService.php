@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\appointment\Service;
 
 use Drupal\appointment\Entity\AgencyEntity;
+use Drupal\appointment\Entity\AdviserEntity;
 use Drupal\appointment\Entity\AppointmentEntity;
 use Drupal\Component\Datetime\TimeInterface;
 use Drupal\Core\Datetime\DateFormatterInterface;
@@ -53,29 +54,22 @@ class AppointmentManagerService
             return [];
         }
 
-        /** @var AgencyEntity|null $agency */
-        $agency = $this->entityTypeManager->getStorage('agency')->load($agency_id);
-        if (!$agency) {
-            return [];
-        }
+        $ids = $this->entityTypeManager->getStorage('adviser')
+            ->getQuery()
+            ->accessCheck(FALSE)
+            ->condition('agency', $agency_id)
+            ->condition('status', 1)
+            ->sort('name')
+            ->execute();
 
-        $raw = (string) $agency->get('advisers')->value;
-        if ($raw === '') {
-            return [];
-        }
-
-        try {
-            $decoded = json_decode($raw, TRUE, 512, JSON_THROW_ON_ERROR);
-        } catch (\Throwable) {
+        if (!$ids) {
             return [];
         }
 
         $options = [];
-        foreach ($decoded as $item) {
-            if (!is_array($item) || empty($item['email']) || empty($item['name'])) {
-                continue;
-            }
-            $options[(string) $item['email']] = (string) $item['name'] . ' (' . (string) $item['email'] . ')';
+        /** @var AdviserEntity $adviser */
+        foreach ($this->entityTypeManager->getStorage('adviser')->loadMultiple($ids) as $adviser) {
+            $options[(int) $adviser->id()] = (string) $adviser->get('name')->value . ' (' . (string) $adviser->get('email')->value . ')';
         }
 
         return $options;
@@ -107,7 +101,7 @@ class AppointmentManagerService
     {
         $query = $this->entityTypeManager->getStorage('appointment')->getQuery()->accessCheck(FALSE)
             ->condition('adviser_email', $adviser_email)
-            ->condition('status', 'booked');
+            ->condition('status', ['pending', 'confirmed'], 'IN');
 
         if ($exclude_id) {
             $query->condition('id', $exclude_id, '<>');
@@ -154,7 +148,7 @@ class AppointmentManagerService
         $appointment->set('client_email', $values['client_email']);
         $appointment->set('client_phone', $values['client_phone'] ?? '');
         $appointment->set('notes', $values['notes'] ?? '');
-        $appointment->set('status', $values['status'] ?? 'booked');
+        $appointment->set('status', $values['status'] ?? 'pending');
         $appointment->save();
 
         return $appointment;

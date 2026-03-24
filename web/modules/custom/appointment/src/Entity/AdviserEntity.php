@@ -11,24 +11,24 @@ use Drupal\Core\Field\BaseFieldDefinition;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
 
 /**
- * Defines the agency entity.
+ * Defines the adviser entity.
  *
  * @ContentEntityType(
- *   id = "agency",
- *   label = @Translation("Agency"),
- *   base_table = "agency",
- *   admin_permission = "access content",
+ *   id = "adviser",
+ *   label = @Translation("Adviser"),
+ *   base_table = "adviser",
+ *   admin_permission = "administer appointments",
  *   entity_keys = {
  *     "id" = "id",
  *     "uuid" = "uuid",
  *     "label" = "name"
  *   },
  *   links = {
- *     "canonical" = "/agency/{agency}"
+ *     "canonical" = "/adviser/{adviser}"
  *   }
  * )
  */
-class AgencyEntity extends ContentEntityBase
+class AdviserEntity extends ContentEntityBase
 {
 
     use EntityChangedTrait;
@@ -45,27 +45,27 @@ class AgencyEntity extends ContentEntityBase
             ->setRequired(TRUE)
             ->setSettings(['max_length' => 255]);
 
-        $fields['address'] = BaseFieldDefinition::create('string_long')
-            ->setLabel(new TranslatableMarkup('Address'))
+        $fields['email'] = BaseFieldDefinition::create('email')
+            ->setLabel(new TranslatableMarkup('Email'))
+            ->setRequired(TRUE);
+
+        $fields['agency'] = BaseFieldDefinition::create('entity_reference')
+            ->setLabel(new TranslatableMarkup('Agency'))
+            ->setRequired(TRUE)
+            ->setSetting('target_type', 'agency');
+
+        $fields['working_hours'] = BaseFieldDefinition::create('string_long')
+            ->setLabel(new TranslatableMarkup('Working hours'))
+            ->setDescription(new TranslatableMarkup('Working hours schedule for this adviser.'))
             ->setRequired(FALSE);
 
-        $fields['contact_info'] = BaseFieldDefinition::create('string')
-            ->setLabel(new TranslatableMarkup('Contact information'))
-            ->setRequired(FALSE)
-            ->setSettings(['max_length' => 255]);
-
-        $fields['operating_hours'] = BaseFieldDefinition::create('string_long')
-            ->setLabel(new TranslatableMarkup('Operating hours'))
-            ->setDescription(new TranslatableMarkup('Agency operating hours schedule.'))
-            ->setRequired(FALSE);
-
-        $fields['advisers'] = BaseFieldDefinition::create('string_long')
-            ->setLabel(new TranslatableMarkup('Advisers JSON'))
-            ->setDescription(new TranslatableMarkup('JSON array of advisers with name and email.'))
+        $fields['specializations'] = BaseFieldDefinition::create('string_long')
+            ->setLabel(new TranslatableMarkup('Specializations'))
+            ->setDescription(new TranslatableMarkup('Areas of specialization for this adviser.'))
             ->setRequired(FALSE);
 
         $fields['status'] = BaseFieldDefinition::create('boolean')
-            ->setLabel(new TranslatableMarkup('Published'))
+            ->setLabel(new TranslatableMarkup('Active'))
             ->setDefaultValue(TRUE);
 
         $fields['created'] = BaseFieldDefinition::create('created')

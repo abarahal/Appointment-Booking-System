@@ -1,14 +1,3 @@
-appointment.frontend:
-  version: 1.x
-  js:
-    js/appointment.dialog_stack.js: {}
-  dependencies:
-    - core/drupal
-    - core/drupal.ajax
-    - core/drupal.dialog.ajax
-    - core/drupalSettings
-    - core/jquery
-
 fullcalendar:
   version: 6.x
   remote: https://fullcalendar.io

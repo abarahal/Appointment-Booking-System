@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\appointment\Form;
 
+use Drupal\appointment\Entity\AdviserEntity;
 use Drupal\appointment\Entity\AgencyEntity;
 use Drupal\appointment\Entity\AppointmentEntity;
 use Drupal\Core\Form\FormBase;
@@ -94,18 +95,24 @@ class AppointmentBookForm extends FormBase
 
             case 3:
                 $agency_id = isset($data['agency']) ? (int) $data['agency'] : 0;
-                $form['wizard']['adviser_email'] = [
+                $form['wizard']['adviser'] = [
                     '#type' => 'select',
                     '#title' => $this->t('Choose adviser'),
                     '#required' => TRUE,
                     '#options' => $this->loadAdviserOptions($agency_id),
-                    '#default_value' => $data['adviser_email'] ?? NULL,
+                    '#default_value' => $data['adviser'] ?? NULL,
                     '#empty_option' => $this->t('- Select -'),
                 ];
                 break;
 
             case 4:
-                $adviser_email = (string) ($data['adviser_email'] ?? '');
+                $adviser_id = isset($data['adviser']) ? (int) $data['adviser'] : 0;
+                $adviser_email = '';
+                if ($adviser_id) {
+                    /** @var AdviserEntity|null $adviser_entity */
+                    $adviser_entity = \Drupal::entityTypeManager()->getStorage('adviser')->load($adviser_id);
+                    $adviser_email = $adviser_entity ? (string) $adviser_entity->get('email')->value : '';
+                }
                 $exclude_id = $appointment?->id() ? (int) $appointment->id() : NULL;
 
                 $form['wizard']['calendar_container'] = [
@@ -228,7 +235,13 @@ class AppointmentBookForm extends FormBase
 
             $tempstore = \Drupal::service('tempstore.private')->get('appointment_booking');
             $data = $tempstore->get((string) $form_state->getValue('store_key')) ?? [];
-            $adviser_email = (string) ($data['adviser_email'] ?? '');
+            $adviser_id = isset($data['adviser']) ? (int) $data['adviser'] : 0;
+            $adviser_email = '';
+            if ($adviser_id) {
+                /** @var AdviserEntity|null $adviser_entity */
+                $adviser_entity = \Drupal::entityTypeManager()->getStorage('adviser')->load($adviser_id);
+                $adviser_email = $adviser_entity ? (string) $adviser_entity->get('email')->value : '';
+            }
             if ($adviser_email === '') {
                 $form_state->setErrorByName('appointment_time', $this->t('Please select an adviser first.'));
                 return;
@@ -284,12 +297,22 @@ class AppointmentBookForm extends FormBase
         }
 
         $agency_id = (int) ($data['agency'] ?? 0);
-        $adviser_email = (string) ($data['adviser_email'] ?? '');
-        $adviser_name = $this->loadAdviserName($agency_id, $adviser_email);
+        $adviser_id = isset($data['adviser']) ? (int) $data['adviser'] : 0;
+        $adviser_name = '';
+        $adviser_email = '';
+        if ($adviser_id) {
+            /** @var AdviserEntity|null $adviser_entity */
+            $adviser_entity = \Drupal::entityTypeManager()->getStorage('adviser')->load($adviser_id);
+            if ($adviser_entity) {
+                $adviser_name = (string) $adviser_entity->get('name')->value;
+                $adviser_email = (string) $adviser_entity->get('email')->value;
+            }
+        }
         $start = (int) strtotime(((string) ($data['appointment_date'] ?? '')) . ' ' . ((string) ($data['appointment_time'] ?? '')));
 
         $appointment->set('uid', (int) $this->currentUser()->id());
         $appointment->set('agency', $agency_id);
+        $appointment->set('adviser', $adviser_id ?: NULL);
         $appointment->set('adviser_name', $adviser_name);
         $appointment->set('adviser_email', $adviser_email);
         $appointment->set('appointment_type', (int) ($data['appointment_type'] ?? 0));
@@ -299,10 +322,12 @@ class AppointmentBookForm extends FormBase
         $appointment->set('client_email', (string) ($data['client_email'] ?? ''));
         $appointment->set('client_phone', (string) ($data['client_phone'] ?? ''));
         $appointment->set('notes', (string) ($data['notes'] ?? ''));
-        $appointment->set('status', 'booked');
+        $appointment->set('status', 'pending');
         $appointment->save();
 
-        \Drupal::service('appointment.email_service')->sendAppointmentEmail($appointment, $appointment_id ? 'modification' : 'confirmation');
+        if ($appointment_id) {
+            \Drupal::service('appointment.email_service')->sendAppointmentEmail($appointment, 'modification');
+        }
         $tempstore->delete($store_key);
 
         $this->messenger()->addStatus($appointment_id ? $this->t('Appointment updated successfully.') : $this->t('Appointment booked successfully.'));
@@ -365,7 +390,7 @@ class AppointmentBookForm extends FormBase
                 break;
 
             case 3:
-                $data['adviser_email'] = (string) $form_state->getValue('adviser_email');
+                $data['adviser'] = (int) $form_state->getValue('adviser');
                 break;
 
             case 4:
@@ -400,11 +425,18 @@ class AppointmentBookForm extends FormBase
             $type_label = $type ? $type->label() : '';
         }
 
+        $adviser_label = '';
+        if (!empty($data['adviser'])) {
+            /** @var AdviserEntity|null $adviser_entity_summary */
+            $adviser_entity_summary = \Drupal::entityTypeManager()->getStorage('adviser')->load((int) $data['adviser']);
+            $adviser_label = $adviser_entity_summary ? (string) $adviser_entity_summary->get('name')->value . ' (' . (string) $adviser_entity_summary->get('email')->value . ')' : '';
+        }
+
         $summary = [
             '<ul>',
             '<li><strong>' . $this->t('Agency') . ':</strong> ' . htmlspecialchars($agency_label) . '</li>',
             '<li><strong>' . $this->t('Type') . ':</strong> ' . htmlspecialchars($type_label) . '</li>',
-            '<li><strong>' . $this->t('Adviser') . ':</strong> ' . htmlspecialchars((string) ($data['adviser_email'] ?? '')) . '</li>',
+            '<li><strong>' . $this->t('Adviser') . ':</strong> ' . htmlspecialchars($adviser_label) . '</li>',
             '<li><strong>' . $this->t('Date') . ':</strong> ' . htmlspecialchars((string) ($data['appointment_date'] ?? '')) . '</li>',
             '<li><strong>' . $this->t('Time') . ':</strong> ' . htmlspecialchars((string) ($data['appointment_time'] ?? '')) . '</li>',
             '<li><strong>' . $this->t('Name') . ':</strong> ' . htmlspecialchars((string) ($data['client_name'] ?? '')) . '</li>',
@@ -423,7 +455,7 @@ class AppointmentBookForm extends FormBase
         return [
             'agency' => (int) $appointment->get('agency')->target_id,
             'appointment_type' => (int) $appointment->get('appointment_type')->target_id,
-            'adviser_email' => (string) $appointment->get('adviser_email')->value,
+            'adviser' => $appointment->get('adviser')->target_id ? (int) $appointment->get('adviser')->target_id : 0,
             'appointment_date' => date('Y-m-d', (int) $appointment->get('start_time')->value),
             'appointment_time' => date('H:i', (int) $appointment->get('start_time')->value),
             'client_name' => (string) $appointment->get('client_name')->value,
@@ -472,29 +504,22 @@ class AppointmentBookForm extends FormBase
             return [];
         }
 
-        /** @var AgencyEntity|null $agency */
-        $agency = \Drupal::entityTypeManager()->getStorage('agency')->load($agency_id);
-        if (!$agency) {
-            return [];
-        }
+        $ids = \Drupal::entityTypeManager()->getStorage('adviser')
+            ->getQuery()
+            ->accessCheck(FALSE)
+            ->condition('agency', $agency_id)
+            ->condition('status', 1)
+            ->sort('name')
+            ->execute();
 
-        $raw = (string) $agency->get('advisers')->value;
-        if ($raw === '') {
-            return [];
-        }
-
-        try {
-            $decoded = json_decode($raw, TRUE, 512, JSON_THROW_ON_ERROR);
-        } catch (\Throwable) {
+        if (!$ids) {
             return [];
         }
 
         $options = [];
-        foreach ($decoded as $item) {
-            if (!is_array($item) || empty($item['email']) || empty($item['name'])) {
-                continue;
-            }
-            $options[(string) $item['email']] = (string) $item['name'] . ' (' . (string) $item['email'] . ')';
+        /** @var AdviserEntity $adviser */
+        foreach (\Drupal::entityTypeManager()->getStorage('adviser')->loadMultiple($ids) as $adviser) {
+            $options[(int) $adviser->id()] = (string) $adviser->get('name')->value . ' (' . (string) $adviser->get('email')->value . ')';
         }
 
         return $options;
@@ -503,14 +528,14 @@ class AppointmentBookForm extends FormBase
     /**
      * Returns adviser name for selected agency/email.
      */
-    protected function loadAdviserName(int $agency_id, string $adviser_email): string
+    protected function loadAdviserName(int $adviser_id): string
     {
-        $options = $this->loadAdviserOptions($agency_id);
-        $label = $options[$adviser_email] ?? $adviser_email;
-        if (str_contains($label, ' (')) {
-            return explode(' (', $label)[0];
+        if ($adviser_id <= 0) {
+            return '';
         }
-        return $label;
+        /** @var AdviserEntity|null $adviser */
+        $adviser = \Drupal::entityTypeManager()->getStorage('adviser')->load($adviser_id);
+        return $adviser ? (string) $adviser->get('name')->value : '';
     }
 
     /**
@@ -520,7 +545,7 @@ class AppointmentBookForm extends FormBase
     {
         $query = \Drupal::entityTypeManager()->getStorage('appointment')->getQuery()->accessCheck(FALSE)
             ->condition('adviser_email', $adviser_email)
-            ->condition('status', 'booked');
+            ->condition('status', ['pending', 'confirmed'], 'IN');
 
         if ($exclude_id) {
             $query->condition('id', $exclude_id, '<>');

@@ -25,9 +25,6 @@ class AppointmentController extends ControllerBase
             '#appointment' => $appointment,
             '#edit_url' => Url::fromRoute('appointment.edit', ['appointment' => $appointment->id()])->toString(),
             '#cancel_url' => Url::fromRoute('appointment.cancel', ['appointment' => $appointment->id()])->toString(),
-            '#attached' => [
-                'library' => ['appointment/appointment.frontend'],
-            ],
         ];
     }
 
@@ -90,9 +87,6 @@ class AppointmentController extends ControllerBase
             '#rows' => $rows,
             '#filters' => $filters,
             '#lookup_url' => Url::fromRoute('appointment.lookup')->toString(),
-            '#attached' => [
-                'library' => ['appointment/appointment.frontend'],
-            ],
         ];
     }
 
@@ -120,7 +114,7 @@ class AppointmentController extends ControllerBase
         $query = $this->entityTypeManager()->getStorage('appointment')->getQuery()
             ->accessCheck(FALSE)
             ->condition('adviser_email', $adviser_email)
-            ->condition('status', 'booked')
+            ->condition('status', ['pending', 'confirmed'], 'IN')
             ->condition('start_time', $start_ts, '>=')
             ->condition('end_time', $end_ts, '<=');
 

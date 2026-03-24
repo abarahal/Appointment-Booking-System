@@ -12,6 +12,7 @@
                 return;
             }
 
+            
             var calendarEl = elements[0];
             var settings = drupalSettings.appointmentCalendar || {};
             var adviserEmail = settings.adviserEmail || '';
@@ -81,7 +82,7 @@
                                 .then(function (data) {
                                     var events = (data || []).map(function (slot) {
                                         return {
-                                            title: Drupal.t('Booked'),
+                                            title: Drupal.t('Unavailable'),
                                             start: slot.start,
                                             end: slot.end,
                                             display: 'background',
@@ -121,7 +122,7 @@
                 },
                 eventDidMount: function (info) {
                     if (info.event.extendedProps && info.event.display === 'background') {
-                        info.el.title = Drupal.t('This slot is already booked');
+                        info.el.title = Drupal.t('This slot is unavailable');
                     }
                 }
             });

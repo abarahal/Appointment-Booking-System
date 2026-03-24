@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Drupal\appointment\Entity\AdviserEntity;
 use Drupal\appointment\Entity\AgencyEntity;
 use Drupal\appointment\Entity\AppointmentEntity;
 use Drupal\Core\Database\Database;
@@ -41,32 +42,51 @@ function appointment_install(): void
     $agency_storage = \Drupal::entityTypeManager()->getStorage('agency');
     $has_agency = $agency_storage->getQuery()->accessCheck(FALSE)->range(0, 1)->execute();
     if (!$has_agency) {
-        $agencies = [
+        $agencies_data = [
             [
                 'name' => 'Central Agency',
                 'address' => '123 Main Street',
+                'contact_info' => '+33 1 23 45 67 89',
+                'operating_hours' => 'Mon-Fri 08:00-18:00',
                 'advisers' => [
-                    ['name' => 'Alice Morgan', 'email' => 'alice@example.com'],
-                    ['name' => 'David Reed', 'email' => 'david@example.com'],
+                    ['name' => 'Alice Morgan', 'email' => 'alice@example.com', 'specializations' => 'Consultation, Follow-up'],
+                    ['name' => 'David Reed', 'email' => 'david@example.com', 'specializations' => 'Support'],
                 ],
             ],
             [
                 'name' => 'North Branch',
                 'address' => '77 North Avenue',
+                'contact_info' => '+33 1 98 76 54 32',
+                'operating_hours' => 'Mon-Fri 09:00-17:00',
                 'advisers' => [
-                    ['name' => 'Rina Patel', 'email' => 'rina@example.com'],
-                    ['name' => 'Leo Grant', 'email' => 'leo@example.com'],
+                    ['name' => 'Rina Patel', 'email' => 'rina@example.com', 'specializations' => 'Consultation'],
+                    ['name' => 'Leo Grant', 'email' => 'leo@example.com', 'specializations' => 'Follow-up, Support'],
                 ],
             ],
         ];
 
-        foreach ($agencies as $agency_values) {
-            AgencyEntity::create([
+        foreach ($agencies_data as $agency_values) {
+            $agency = AgencyEntity::create([
                 'name' => $agency_values['name'],
                 'address' => $agency_values['address'],
+                'contact_info' => $agency_values['contact_info'],
+                'operating_hours' => $agency_values['operating_hours'],
                 'advisers' => json_encode($agency_values['advisers'], JSON_THROW_ON_ERROR),
                 'status' => TRUE,
-            ])->save();
+            ]);
+            $agency->save();
+
+            // Create adviser entities for this agency.
+            foreach ($agency_values['advisers'] as $adv) {
+                AdviserEntity::create([
+                    'name' => $adv['name'],
+                    'email' => $adv['email'],
+                    'agency' => $agency->id(),
+                    'working_hours' => $agency_values['operating_hours'],
+                    'specializations' => $adv['specializations'] ?? '',
+                    'status' => TRUE,
+                ])->save();
+            }
         }
     }
 
@@ -78,13 +98,28 @@ function appointment_install(): void
         $type_term = $terms ? reset($terms) : NULL;
         $agency = $agencies ? reset($agencies) : NULL;
 
-        if ($agency && $type_term) {
+        // Find the first adviser for the first agency.
+        $first_adviser = NULL;
+        if ($agency) {
+            $adviser_ids = \Drupal::entityTypeManager()->getStorage('adviser')->getQuery()
+                ->accessCheck(FALSE)
+                ->condition('agency', $agency->id())
+                ->range(0, 1)
+                ->execute();
+            if ($adviser_ids) {
+                /** @var \Drupal\appointment\Entity\AdviserEntity $first_adviser */
+                $first_adviser = \Drupal::entityTypeManager()->getStorage('adviser')->load(reset($adviser_ids));
+            }
+        }
+
+        if ($agency && $type_term && $first_adviser) {
             $start = \Drupal::time()->getRequestTime() + 86400;
             AppointmentEntity::create([
                 'uid' => 0,
                 'agency' => $agency->id(),
-                'adviser_name' => 'Alice Morgan',
-                'adviser_email' => 'alice@example.com',
+                'adviser' => $first_adviser->id(),
+                'adviser_name' => (string) $first_adviser->get('name')->value,
+                'adviser_email' => (string) $first_adviser->get('email')->value,
                 'appointment_type' => $type_term->id(),
                 'start_time' => $start,
                 'end_time' => $start + 3600,
@@ -92,7 +127,7 @@ function appointment_install(): void
                 'client_email' => 'client@example.com',
                 'client_phone' => '0102030405',
                 'notes' => 'Sample appointment generated at install.',
-                'status' => 'booked',
+                'status' => 'pending',
                 'access_token' => hash('sha256', uniqid('appointment_', TRUE)),
             ])->save();
         }
@@ -240,4 +275,106 @@ function appointment_update_10004(): string
     }
 
     return 'Added reminder_sent field and reminder config.';
+}
+
+/**
+ * Install adviser entity, migrate JSON advisers, add new fields, rename booked to pending.
+ */
+function appointment_update_10005(): string
+{
+    $update_manager = \Drupal::entityDefinitionUpdateManager();
+    $entity_type_manager = \Drupal::entityTypeManager();
+
+    // 1. Install the adviser entity type.
+    $adviser_definition = $entity_type_manager->getDefinition('adviser');
+    $update_manager->installEntityType($adviser_definition);
+
+    // 2. Install new fields on agency entity (contact_info, operating_hours).
+    $contact_info = \Drupal\Core\Field\BaseFieldDefinition::create('string')
+        ->setLabel(new \Drupal\Core\StringTranslation\TranslatableMarkup('Contact information'))
+        ->setRequired(FALSE)
+        ->setSettings(['max_length' => 255]);
+    $update_manager->installFieldStorageDefinition('contact_info', 'agency', 'appointment', $contact_info);
+
+    $operating_hours = \Drupal\Core\Field\BaseFieldDefinition::create('string_long')
+        ->setLabel(new \Drupal\Core\StringTranslation\TranslatableMarkup('Operating hours'))
+        ->setRequired(FALSE);
+    $update_manager->installFieldStorageDefinition('operating_hours', 'agency', 'appointment', $operating_hours);
+
+    // 3. Install adviser field on appointment entity.
+    $adviser_field = \Drupal\Core\Field\BaseFieldDefinition::create('entity_reference')
+        ->setLabel(new \Drupal\Core\StringTranslation\TranslatableMarkup('Adviser'))
+        ->setRequired(FALSE)
+        ->setSetting('target_type', 'adviser');
+    $update_manager->installFieldStorageDefinition('adviser', 'appointment', 'appointment', $adviser_field);
+
+    // 4. Migrate JSON advisers from agencies to AdviserEntity instances.
+    $agency_storage = $entity_type_manager->getStorage('agency');
+    $agencies = $agency_storage->loadMultiple();
+    $adviser_map = []; // email => adviser entity ID
+
+    /** @var \Drupal\appointment\Entity\AgencyEntity $agency */
+    foreach ($agencies as $agency) {
+        $raw = (string) $agency->get('advisers')->value;
+        if ($raw === '') {
+            continue;
+        }
+        try {
+            $decoded = json_decode($raw, TRUE, 512, JSON_THROW_ON_ERROR);
+        } catch (\Throwable) {
+            continue;
+        }
+        foreach ($decoded as $item) {
+            if (!is_array($item) || empty($item['email']) || empty($item['name'])) {
+                continue;
+            }
+            $email = (string) $item['email'];
+            // Skip if already migrated.
+            if (isset($adviser_map[$email])) {
+                continue;
+            }
+            $adviser = \Drupal\appointment\Entity\AdviserEntity::create([
+                'name' => (string) $item['name'],
+                'email' => $email,
+                'agency' => $agency->id(),
+                'working_hours' => '',
+                'specializations' => '',
+                'status' => TRUE,
+            ]);
+            $adviser->save();
+            $adviser_map[$email] = (int) $adviser->id();
+        }
+    }
+
+    // 5. Update existing appointments: set adviser reference + change booked → pending.
+    $db = \Drupal\Core\Database\Database::getConnection();
+    // Update status booked → pending.
+    $db->update('appointment')
+        ->fields(['status' => 'pending'])
+        ->condition('status', 'booked')
+        ->execute();
+
+    // Set adviser reference based on adviser_email.
+    foreach ($adviser_map as $email => $adviser_id) {
+        $db->update('appointment')
+            ->fields(['adviser' => $adviser_id])
+            ->condition('adviser_email', $email)
+            ->execute();
+    }
+
+    // 6. Update status field definition: booked → pending.
+    $status_definition = $update_manager->getFieldStorageDefinition('status', 'appointment');
+    if ($status_definition instanceof \Drupal\Core\Field\BaseFieldDefinition) {
+        $status_definition->setSettings([
+            'allowed_values' => [
+                'pending' => 'Pending',
+                'confirmed' => 'Confirmed',
+                'cancelled' => 'Cancelled',
+            ],
+        ]);
+        $status_definition->setDefaultValue('pending');
+        $update_manager->updateFieldStorageDefinition($status_definition);
+    }
+
+    return 'Installed adviser entity, migrated JSON advisers, added new agency fields, renamed booked to pending.';
 }

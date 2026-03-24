@@ -33,7 +33,7 @@
   font-size: 0.9rem;
 }
 
-.stat-card.stat-booked {
+.stat-card.stat-pending {
   border-left: 4px solid #0074bd;
 }
 .stat-card.stat-confirmed {
@@ -104,7 +104,7 @@
   text-transform: uppercase;
 }
 
-.appointment-status--booked {
+.appointment-status--pending {
   background: #e3f2fd;
   color: #0074bd;
 }

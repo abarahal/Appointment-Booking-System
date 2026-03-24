@@ -72,11 +72,7 @@ function appointment_theme(array $existing, string $type, string $theme, string 
 /**
  * Implements hook_page_attachments().
  */
-function appointment_page_attachments(array &$attachments): void
-{
-    $attachments['#attached']['library'][] = 'appointment/appointment.frontend';
-    $attachments['#attached']['drupalSettings']['dialogStack'] ??= [];
-}
+function appointment_page_attachments(array &$attachments): void {}
 
 /**
  * Implements hook_mail().
@@ -157,7 +153,7 @@ function appointment_cron(): void
     // that haven't had a reminder sent yet.
     $ids = \Drupal::entityQuery('appointment')
         ->accessCheck(FALSE)
-        ->condition('status', ['booked', 'confirmed'], 'IN')
+        ->condition('status', ['pending', 'confirmed'], 'IN')
         ->condition('start_time', $now, '>')
         ->condition('start_time', $reminder_window, '<=')
         ->condition('reminder_sent', 0)
