@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use Drupal\appointment\Entity\AdviserEntity;
 use Drupal\appointment\Entity\AgencyEntity;
 use Drupal\appointment\Entity\AppointmentEntity;
 use Drupal\Core\Database\Database;
@@ -76,16 +75,28 @@ function appointment_install(): void
             ]);
             $agency->save();
 
-            // Create adviser entities for this agency.
+            // Create user accounts with 'adviser' role for this agency.
+            $user_storage = \Drupal::entityTypeManager()->getStorage('user');
+            $role_storage = \Drupal::entityTypeManager()->getStorage('user_role');
+            if (!$role_storage->load('adviser')) {
+                $role_storage->create(['id' => 'adviser', 'label' => 'Adviser'])->save();
+            }
             foreach ($agency_values['advisers'] as $adv) {
-                AdviserEntity::create([
-                    'name' => $adv['name'],
-                    'email' => $adv['email'],
-                    'agency' => $agency->id(),
-                    'working_hours' => $agency_values['operating_hours'],
-                    'specializations' => $adv['specializations'] ?? '',
-                    'status' => TRUE,
-                ])->save();
+                $existing = $user_storage->getQuery()->accessCheck(FALSE)->condition('mail', $adv['email'])->range(0, 1)->execute();
+                if (!$existing) {
+                    /** @var \Drupal\user\UserInterface $user */
+                    $user = $user_storage->create([
+                        'name' => $adv['name'],
+                        'mail' => $adv['email'],
+                        'status' => 1,
+                        'pass' => \Drupal::service('password_generator')->generate(20),
+                    ]);
+                    $user->addRole('adviser');
+                    $user->set('field_adviser_agency', $agency->id());
+                    $user->set('field_working_hours', $agency_values['operating_hours']);
+                    $user->set('field_specializations', $adv['specializations'] ?? '');
+                    $user->save();
+                }
             }
         }
     }
@@ -98,17 +109,19 @@ function appointment_install(): void
         $type_term = $terms ? reset($terms) : NULL;
         $agency = $agencies ? reset($agencies) : NULL;
 
-        // Find the first adviser for the first agency.
+        // Find the first adviser user for the first agency.
         $first_adviser = NULL;
         if ($agency) {
-            $adviser_ids = \Drupal::entityTypeManager()->getStorage('adviser')->getQuery()
+            $adviser_uids = \Drupal::entityTypeManager()->getStorage('user')->getQuery()
                 ->accessCheck(FALSE)
-                ->condition('agency', $agency->id())
+                ->condition('roles', 'adviser')
+                ->condition('field_adviser_agency', $agency->id())
+                ->condition('status', 1)
                 ->range(0, 1)
                 ->execute();
-            if ($adviser_ids) {
-                /** @var \Drupal\appointment\Entity\AdviserEntity $first_adviser */
-                $first_adviser = \Drupal::entityTypeManager()->getStorage('adviser')->load(reset($adviser_ids));
+            if ($adviser_uids) {
+                /** @var \Drupal\user\UserInterface $first_adviser */
+                $first_adviser = \Drupal::entityTypeManager()->getStorage('user')->load(reset($adviser_uids));
             }
         }
 
@@ -118,8 +131,8 @@ function appointment_install(): void
                 'uid' => 0,
                 'agency' => $agency->id(),
                 'adviser' => $first_adviser->id(),
-                'adviser_name' => (string) $first_adviser->get('name')->value,
-                'adviser_email' => (string) $first_adviser->get('email')->value,
+                'adviser_name' => $first_adviser->getDisplayName(),
+                'adviser_email' => $first_adviser->getEmail(),
                 'appointment_type' => $type_term->id(),
                 'start_time' => $start,
                 'end_time' => $start + 3600,
@@ -285,9 +298,13 @@ function appointment_update_10005(): string
     $update_manager = \Drupal::entityDefinitionUpdateManager();
     $entity_type_manager = \Drupal::entityTypeManager();
 
-    // 1. Install the adviser entity type.
-    $adviser_definition = $entity_type_manager->getDefinition('adviser');
-    $update_manager->installEntityType($adviser_definition);
+    // 1. Install the adviser entity type (now obsolete — kept for historical record only).
+    // The adviser entity type has been replaced by user accounts with 'adviser' role.
+    // On environments that already have the adviser table, this is a no-op.
+    if (!Database::getConnection()->schema()->tableExists('adviser')) {
+        // Skip — adviser entity class no longer exists.
+        // New installs create users directly via appointment_install().
+    }
 
     // 2. Install new fields on agency entity (contact_info, operating_hours).
     $contact_info = \Drupal\Core\Field\BaseFieldDefinition::create('string')
@@ -301,17 +318,21 @@ function appointment_update_10005(): string
         ->setRequired(FALSE);
     $update_manager->installFieldStorageDefinition('operating_hours', 'agency', 'appointment', $operating_hours);
 
-    // 3. Install adviser field on appointment entity.
+    // 3. Install adviser field on appointment entity (target user, not adviser entity).
     $adviser_field = \Drupal\Core\Field\BaseFieldDefinition::create('entity_reference')
         ->setLabel(new \Drupal\Core\StringTranslation\TranslatableMarkup('Adviser'))
         ->setRequired(FALSE)
-        ->setSetting('target_type', 'adviser');
+        ->setSetting('target_type', 'user');
     $update_manager->installFieldStorageDefinition('adviser', 'appointment', 'appointment', $adviser_field);
 
-    // 4. Migrate JSON advisers from agencies to AdviserEntity instances.
+    // 4. Migrate JSON advisers from agencies to user accounts with 'adviser' role.
+    $role_storage = \Drupal::entityTypeManager()->getStorage('user_role');
+    if (!$role_storage->load('adviser')) {
+        $role_storage->create(['id' => 'adviser', 'label' => 'Adviser'])->save();
+    }
     $agency_storage = $entity_type_manager->getStorage('agency');
     $agencies = $agency_storage->loadMultiple();
-    $adviser_map = []; // email => adviser entity ID
+    $user_storage = \Drupal::entityTypeManager()->getStorage('user');
 
     /** @var \Drupal\appointment\Entity\AgencyEntity $agency */
     foreach ($agencies as $agency) {
@@ -329,24 +350,23 @@ function appointment_update_10005(): string
                 continue;
             }
             $email = (string) $item['email'];
-            // Skip if already migrated.
-            if (isset($adviser_map[$email])) {
-                continue;
+            $existing = $user_storage->getQuery()->accessCheck(FALSE)->condition('mail', $email)->range(0, 1)->execute();
+            if (!$existing) {
+                /** @var \Drupal\user\UserInterface $user */
+                $user = $user_storage->create([
+                    'name' => (string) $item['name'],
+                    'mail' => $email,
+                    'status' => 1,
+                    'pass' => \Drupal::service('password_generator')->generate(20),
+                ]);
+                $user->addRole('adviser');
+                $user->set('field_adviser_agency', $agency->id());
+                $user->save();
             }
-            $adviser = \Drupal\appointment\Entity\AdviserEntity::create([
-                'name' => (string) $item['name'],
-                'email' => $email,
-                'agency' => $agency->id(),
-                'working_hours' => '',
-                'specializations' => '',
-                'status' => TRUE,
-            ]);
-            $adviser->save();
-            $adviser_map[$email] = (int) $adviser->id();
         }
     }
 
-    // 5. Update existing appointments: set adviser reference + change booked → pending.
+    // 5. Update existing appointments: set adviser reference (user) + change booked → pending.
     $db = \Drupal\Core\Database\Database::getConnection();
     // Update status booked → pending.
     $db->update('appointment')
@@ -354,13 +374,13 @@ function appointment_update_10005(): string
         ->condition('status', 'booked')
         ->execute();
 
-    // Set adviser reference based on adviser_email.
-    foreach ($adviser_map as $email => $adviser_id) {
-        $db->update('appointment')
-            ->fields(['adviser' => $adviser_id])
-            ->condition('adviser_email', $email)
-            ->execute();
-    }
+    // Set adviser reference based on adviser_email → user uid.
+    $db->query(
+        "UPDATE {appointment} ap
+         INNER JOIN {users_field_data} u ON u.mail = ap.adviser_email
+         SET ap.adviser = u.uid
+         WHERE ap.adviser_email IS NOT NULL AND ap.adviser_email != ''"
+    );
 
     // 6. Update status field definition: booked → pending.
     $status_definition = $update_manager->getFieldStorageDefinition('status', 'appointment');
@@ -377,4 +397,213 @@ function appointment_update_10005(): string
     }
 
     return 'Installed adviser entity, migrated JSON advisers, added new agency fields, renamed booked to pending.';
+}
+
+/**
+ * Add soft-delete 'deleted' field to appointment entity.
+ */
+function appointment_update_10006(): string
+{
+    $update_manager = \Drupal::entityDefinitionUpdateManager();
+    $field = \Drupal\Core\Field\BaseFieldDefinition::create('boolean')
+        ->setLabel(new \Drupal\Core\StringTranslation\TranslatableMarkup('Deleted'))
+        ->setDescription(new \Drupal\Core\StringTranslation\TranslatableMarkup('Soft-delete flag.'))
+        ->setDefaultValue(FALSE);
+    $update_manager->installFieldStorageDefinition('deleted', 'appointment', 'appointment', $field);
+
+    return 'Added soft-delete deleted field to appointment entity.';
+}
+
+/**
+ * Set deleted = 0 for existing appointments that have NULL.
+ */
+function appointment_update_10007(): string
+{
+    \Drupal::database()->update('appointment')
+        ->fields(['deleted' => 0])
+        ->isNull('deleted')
+        ->execute();
+
+    return 'Set deleted=0 for all pre-existing appointments.';
+}
+
+/**
+ * Migrate advisers from custom entity to Drupal users with 'adviser' role.
+ *
+ * Creates the 'adviser' role, user fields (field_adviser_agency,
+ * field_working_hours, field_specializations), creates a user account
+ * per adviser entity, and updates the appointment.adviser column to
+ * point to the new user IDs.
+ */
+function appointment_update_10008(): string
+{
+    // 1. Create the 'adviser' role if it does not exist.
+    $role_storage = \Drupal::entityTypeManager()->getStorage('user_role');
+    if (!$role_storage->load('adviser')) {
+        $role_storage->create([
+            'id' => 'adviser',
+            'label' => 'Adviser',
+        ])->save();
+    }
+
+    // 2. Create field storage + field instances on user entity.
+    $field_storage_manager = \Drupal::entityTypeManager()->getStorage('field_storage_config');
+    $field_config_manager = \Drupal::entityTypeManager()->getStorage('field_config');
+
+    // field_adviser_agency (entity_reference → agency).
+    if (!$field_storage_manager->load('user.field_adviser_agency')) {
+        $field_storage_manager->create([
+            'field_name' => 'field_adviser_agency',
+            'entity_type' => 'user',
+            'type' => 'entity_reference',
+            'settings' => ['target_type' => 'agency'],
+            'cardinality' => 1,
+        ])->save();
+    }
+    if (!$field_config_manager->load('user.user.field_adviser_agency')) {
+        $field_config_manager->create([
+            'field_name' => 'field_adviser_agency',
+            'entity_type' => 'user',
+            'bundle' => 'user',
+            'label' => 'Agency',
+            'required' => FALSE,
+        ])->save();
+    }
+
+    // field_working_hours (string_long).
+    if (!$field_storage_manager->load('user.field_working_hours')) {
+        $field_storage_manager->create([
+            'field_name' => 'field_working_hours',
+            'entity_type' => 'user',
+            'type' => 'string_long',
+            'cardinality' => 1,
+        ])->save();
+    }
+    if (!$field_config_manager->load('user.user.field_working_hours')) {
+        $field_config_manager->create([
+            'field_name' => 'field_working_hours',
+            'entity_type' => 'user',
+            'bundle' => 'user',
+            'label' => 'Working hours',
+            'required' => FALSE,
+        ])->save();
+    }
+
+    // field_specializations (string_long).
+    if (!$field_storage_manager->load('user.field_specializations')) {
+        $field_storage_manager->create([
+            'field_name' => 'field_specializations',
+            'entity_type' => 'user',
+            'type' => 'string_long',
+            'cardinality' => 1,
+        ])->save();
+    }
+    if (!$field_config_manager->load('user.user.field_specializations')) {
+        $field_config_manager->create([
+            'field_name' => 'field_specializations',
+            'entity_type' => 'user',
+            'bundle' => 'user',
+            'label' => 'Specializations',
+            'required' => FALSE,
+        ])->save();
+    }
+
+    // 3. Update the adviser field definition on appointment to target 'user'.
+    $update_manager = \Drupal::entityDefinitionUpdateManager();
+    $adviser_field = $update_manager->getFieldStorageDefinition('adviser', 'appointment');
+    if ($adviser_field instanceof \Drupal\Core\Field\BaseFieldDefinition) {
+        $adviser_field->setSetting('target_type', 'user');
+        $update_manager->updateFieldStorageDefinition($adviser_field);
+    }
+
+    // 4. Load all adviser entities and create corresponding user accounts.
+    $db = \Drupal::database();
+    $schema = $db->schema();
+
+    if (!$schema->tableExists('adviser')) {
+        return 'Adviser table does not exist. Nothing to migrate.';
+    }
+
+    $adviser_rows = $db->select('adviser', 'a')
+        ->fields('a', ['id', 'name', 'email', 'agency', 'working_hours', 'specializations', 'status'])
+        ->execute()
+        ->fetchAll();
+
+    $user_storage = \Drupal::entityTypeManager()->getStorage('user');
+    $old_to_new = []; // old adviser entity ID => new user ID.
+
+    foreach ($adviser_rows as $row) {
+        $email = (string) $row->email;
+        $name = (string) $row->name;
+
+        // Check if a user with this email already exists.
+        $existing = $user_storage->getQuery()
+            ->accessCheck(FALSE)
+            ->condition('mail', $email)
+            ->range(0, 1)
+            ->execute();
+
+        if ($existing) {
+            $uid = (int) reset($existing);
+            /** @var \Drupal\user\UserInterface $user */
+            $user = $user_storage->load($uid);
+            if ($user && !$user->hasRole('adviser')) {
+                $user->addRole('adviser');
+                $user->set('field_adviser_agency', (int) $row->agency);
+                $user->set('field_working_hours', (string) ($row->working_hours ?? ''));
+                $user->set('field_specializations', (string) ($row->specializations ?? ''));
+                $user->save();
+            }
+            $old_to_new[(int) $row->id] = $uid;
+            continue;
+        }
+
+        // Create a new user account.
+        /** @var \Drupal\user\UserInterface $user */
+        $user = $user_storage->create([
+            'name' => $name,
+            'mail' => $email,
+            'status' => (int) $row->status,
+            'pass' => \Drupal::service('password_generator')->generate(20),
+        ]);
+        $user->addRole('adviser');
+        $user->set('field_adviser_agency', (int) $row->agency);
+        $user->set('field_working_hours', (string) ($row->working_hours ?? ''));
+        $user->set('field_specializations', (string) ($row->specializations ?? ''));
+        $user->save();
+
+        $old_to_new[(int) $row->id] = (int) $user->id();
+    }
+
+    // 5. Update appointment.adviser column: old adviser entity IDs → new user IDs.
+    // Use a single JOIN-based UPDATE to avoid sequential cascading.
+    $db->query(
+        "UPDATE {appointment} ap
+         INNER JOIN {users_field_data} u ON u.mail = ap.adviser_email
+         SET ap.adviser = u.uid
+         WHERE ap.adviser_email IS NOT NULL AND ap.adviser_email != ''"
+    );
+
+    return 'Migrated ' . count($old_to_new) . ' advisers from custom entity to Drupal user accounts with adviser role.';
+}
+
+/**
+ * Remove the obsolete adviser entity type and drop its database table.
+ */
+function appointment_update_10009(): string
+{
+    $db = \Drupal::database();
+    $schema = $db->schema();
+
+    // Uninstall the adviser entity type from Drupal's entity system.
+    $update_manager = \Drupal::entityDefinitionUpdateManager();
+    $entity_type = $update_manager->getEntityType('adviser');
+    if ($entity_type) {
+        $update_manager->uninstallEntityType($entity_type);
+    } elseif ($schema->tableExists('adviser')) {
+        // If entity type is already gone but table remains, drop it manually.
+        $schema->dropTable('adviser');
+    }
+
+    return 'Removed adviser entity type and dropped adviser table.';
 }

@@ -1,0 +1,11 @@
+id,name,address,contact_info,operating_hours
+1,Agence Casablanca Centre,12 Boulevard Mohammed V Casablanca,0522-223344,Lun-Ven 08:30-16:30
+2,Agence Rabat Agdal,45 Avenue Fal Ould Oumeir Rabat,0537-774455,Lun-Ven 08:30-16:30
+3,Agence Marrakech Guéliz,78 Rue de la Liberté Marrakech,0524-431122,Lun-Ven 09:00-17:00
+4,Agence Tanger Médina,23 Rue Sidi Bouabid Tanger,0539-332211,Lun-Ven 08:30-16:30
+5,Agence Fès Saiss,56 Boulevard Allal El Fassi Fès,0535-654321,Lun-Ven 09:00-17:00
+6,Agence Agadir Centre,34 Avenue Hassan II Agadir,0528-223366,Lun-Ven 08:30-16:30
+7,Agence Oujda Ville,11 Boulevard Zerktouni Oujda,0536-112233,Lun-Ven 09:00-17:00
+8,Agence Meknès Hamria,89 Avenue des FAR Meknès,0535-998877,Lun-Ven 08:30-16:30
+9,Agence Kénitra Centre,15 Avenue Mohammed Diouri Kénitra,0537-363636,Lun-Ven 09:00-17:00
+10,Agence Tétouan Médina,67 Boulevard Mohammed V Tétouan,0539-445566,Lun-Ven 08:30-16:30

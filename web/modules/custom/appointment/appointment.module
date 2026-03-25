@@ -189,4 +189,27 @@ function appointment_cron(): void
     \Drupal::logger('appointment')->info('Queued @count reminder emails.', [
         '@count' => count($ids),
     ]);
+
+    // Soft-delete appointments older than one week.
+    $one_week_ago = $now - (7 * 86400);
+    $expired_ids = \Drupal::entityQuery('appointment')
+        ->accessCheck(FALSE)
+        ->condition('deleted', 0)
+        ->condition('start_time', $one_week_ago, '<')
+        ->execute();
+
+    if (!empty($expired_ids)) {
+        $expired = \Drupal::entityTypeManager()
+            ->getStorage('appointment')
+            ->loadMultiple($expired_ids);
+
+        foreach ($expired as $appt) {
+            /** @var \Drupal\appointment\Entity\AppointmentEntity $appt */
+            $appt->softDelete();
+        }
+
+        \Drupal::logger('appointment')->info('Soft-deleted @count expired appointments (older than 1 week).', [
+            '@count' => count($expired_ids),
+        ]);
+    }
 }

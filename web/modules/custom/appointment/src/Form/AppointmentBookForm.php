@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Drupal\appointment\Form;
 
-use Drupal\appointment\Entity\AdviserEntity;
 use Drupal\appointment\Entity\AgencyEntity;
 use Drupal\appointment\Entity\AppointmentEntity;
 use Drupal\Core\Form\FormBase;
@@ -12,7 +11,7 @@ use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Url;
 
 /**
- * Multi-step booking and modification form.
+ * Multi-step booking and modification form with AJAX step transitions.
  */
 class AppointmentBookForm extends FormBase
 {
@@ -35,7 +34,6 @@ class AppointmentBookForm extends FormBase
      */
     public function buildForm(array $form, FormStateInterface $form_state): array
     {
-        $step = $this->getCurrentStep();
         $route_appointment = \Drupal::routeMatch()->getParameter('appointment');
         $appointment = $route_appointment instanceof AppointmentEntity ? $route_appointment : NULL;
         $store_key = $this->getStoreKey($appointment);
@@ -46,6 +44,33 @@ class AppointmentBookForm extends FormBase
             $data = $this->seedDataFromAppointment($appointment);
             $tempstore->set($store_key, $data);
         }
+
+        // Determine the highest completed step from stored data.
+        $max_allowed = $this->getMaxAllowedStep($data);
+
+        // Use form_state for step tracking (AJAX). Fall back to route on initial load.
+        if ($form_state->has('current_step')) {
+            $step = (int) $form_state->get('current_step');
+        } else {
+            $raw = \Drupal::routeMatch()->getParameter('step');
+            $step = is_numeric($raw) ? (int) $raw : 1;
+        }
+
+        // Enforce sequential access: cannot jump beyond allowed step.
+        if ($step < 1) {
+            $step = 1;
+        }
+        if ($step > self::TOTAL_STEPS) {
+            $step = self::TOTAL_STEPS;
+        }
+        if ($step > $max_allowed) {
+            $step = $max_allowed;
+        }
+
+        $form_state->set('current_step', $step);
+
+        $form['#prefix'] = '<div id="appointment-wizard-wrapper">';
+        $form['#suffix'] = '</div>';
 
         $form['step'] = [
             '#type' => 'value',
@@ -109,9 +134,9 @@ class AppointmentBookForm extends FormBase
                 $adviser_id = isset($data['adviser']) ? (int) $data['adviser'] : 0;
                 $adviser_email = '';
                 if ($adviser_id) {
-                    /** @var AdviserEntity|null $adviser_entity */
-                    $adviser_entity = \Drupal::entityTypeManager()->getStorage('adviser')->load($adviser_id);
-                    $adviser_email = $adviser_entity ? (string) $adviser_entity->get('email')->value : '';
+                    /** @var \Drupal\user\UserInterface|null $adviser_user */
+                    $adviser_user = \Drupal::entityTypeManager()->getStorage('user')->load($adviser_id);
+                    $adviser_email = $adviser_user ? (string) $adviser_user->getEmail() : '';
                 }
                 $exclude_id = $appointment?->id() ? (int) $appointment->id() : NULL;
 
@@ -131,8 +156,8 @@ class AppointmentBookForm extends FormBase
                 ];
                 $form['#attached']['library'][] = 'appointment/appointment.calendar';
                 $form['#attached']['drupalSettings']['appointmentCalendar'] = [
-                    'adviserEmail' => $adviser_email,
-                    'bookedSlotsUrl' => \Drupal\Core\Url::fromRoute('appointment.api_booked_slots')->toString(),
+                    'adviserId' => $adviser_id,
+                    'bookedSlotsUrl' => Url::fromRoute('appointment.api_booked_slots')->toString(),
                     'excludeId' => $exclude_id,
                 ];
                 break;
@@ -175,12 +200,20 @@ class AppointmentBookForm extends FormBase
 
         $form['actions'] = ['#type' => 'actions'];
 
+        $ajax_settings = [
+            'callback' => '::ajaxStepCallback',
+            'wrapper' => 'appointment-wizard-wrapper',
+            'effect' => 'fade',
+        ];
+
         if ($step > 1) {
             $form['actions']['previous'] = [
                 '#type' => 'submit',
                 '#value' => $this->t('Previous'),
                 '#name' => 'previous',
                 '#limit_validation_errors' => [],
+                '#submit' => ['::previousStep'],
+                '#ajax' => $ajax_settings,
             ];
         }
 
@@ -189,6 +222,8 @@ class AppointmentBookForm extends FormBase
                 '#type' => 'submit',
                 '#value' => $this->t('Next'),
                 '#name' => 'next',
+                '#submit' => ['::nextStep'],
+                '#ajax' => $ajax_settings,
             ];
         } else {
             $form['actions']['confirm'] = [
@@ -199,6 +234,41 @@ class AppointmentBookForm extends FormBase
         }
 
         return $form;
+    }
+
+    /**
+     * AJAX callback: returns the rebuilt form wrapper.
+     */
+    public function ajaxStepCallback(array &$form, FormStateInterface $form_state): array
+    {
+        return $form;
+    }
+
+    /**
+     * Submit handler for "Previous" button.
+     */
+    public function previousStep(array &$form, FormStateInterface $form_state): void
+    {
+        $step = (int) $form_state->getValue('step');
+        $form_state->set('current_step', max(1, $step - 1));
+        $form_state->setRebuild(TRUE);
+    }
+
+    /**
+     * Submit handler for "Next" button.
+     */
+    public function nextStep(array &$form, FormStateInterface $form_state): void
+    {
+        $step = (int) $form_state->getValue('step');
+        $store_key = (string) $form_state->getValue('store_key');
+        $tempstore = \Drupal::service('tempstore.private')->get('appointment_booking');
+        $data = $tempstore->get($store_key) ?? [];
+
+        $data = $this->storeCurrentStepValues($data, $step, $form_state);
+        $tempstore->set($store_key, $data);
+
+        $form_state->set('current_step', min(self::TOTAL_STEPS, $step + 1));
+        $form_state->setRebuild(TRUE);
     }
 
     /**
@@ -238,9 +308,9 @@ class AppointmentBookForm extends FormBase
             $adviser_id = isset($data['adviser']) ? (int) $data['adviser'] : 0;
             $adviser_email = '';
             if ($adviser_id) {
-                /** @var AdviserEntity|null $adviser_entity */
-                $adviser_entity = \Drupal::entityTypeManager()->getStorage('adviser')->load($adviser_id);
-                $adviser_email = $adviser_entity ? (string) $adviser_entity->get('email')->value : '';
+                /** @var \Drupal\user\UserInterface|null $adviser_user */
+                $adviser_user = \Drupal::entityTypeManager()->getStorage('user')->load($adviser_id);
+                $adviser_email = $adviser_user ? (string) $adviser_user->getEmail() : '';
             }
             if ($adviser_email === '') {
                 $form_state->setErrorByName('appointment_time', $this->t('Please select an adviser first.'));
@@ -267,23 +337,12 @@ class AppointmentBookForm extends FormBase
     public function submitForm(array &$form, FormStateInterface $form_state): void
     {
         $step = (int) $form_state->getValue('step');
-        $trigger = $form_state->getTriggeringElement()['#name'] ?? 'next';
         $store_key = (string) $form_state->getValue('store_key');
         $tempstore = \Drupal::service('tempstore.private')->get('appointment_booking');
         $data = $tempstore->get($store_key) ?? [];
 
-        if ($trigger === 'previous') {
-            $form_state->setRedirectUrl($this->stepUrl($form_state, max(1, $step - 1)));
-            return;
-        }
-
         $data = $this->storeCurrentStepValues($data, $step, $form_state);
         $tempstore->set($store_key, $data);
-
-        if ($trigger === 'next') {
-            $form_state->setRedirectUrl($this->stepUrl($form_state, min(self::TOTAL_STEPS, $step + 1)));
-            return;
-        }
 
         $appointment_id = $form_state->getValue('appointment_id') ? (int) $form_state->getValue('appointment_id') : NULL;
         /** @var AppointmentEntity|null $appointment */
@@ -301,11 +360,11 @@ class AppointmentBookForm extends FormBase
         $adviser_name = '';
         $adviser_email = '';
         if ($adviser_id) {
-            /** @var AdviserEntity|null $adviser_entity */
-            $adviser_entity = \Drupal::entityTypeManager()->getStorage('adviser')->load($adviser_id);
-            if ($adviser_entity) {
-                $adviser_name = (string) $adviser_entity->get('name')->value;
-                $adviser_email = (string) $adviser_entity->get('email')->value;
+            /** @var \Drupal\user\UserInterface|null $adviser_user */
+            $adviser_user = \Drupal::entityTypeManager()->getStorage('user')->load($adviser_id);
+            if ($adviser_user) {
+                $adviser_name = (string) $adviser_user->getDisplayName();
+                $adviser_email = (string) $adviser_user->getEmail();
             }
         }
         $start = (int) strtotime(((string) ($data['appointment_date'] ?? '')) . ' ' . ((string) ($data['appointment_time'] ?? '')));
@@ -335,22 +394,6 @@ class AppointmentBookForm extends FormBase
     }
 
     /**
-     * Gets current wizard step from route.
-     */
-    protected function getCurrentStep(): int
-    {
-        $raw = \Drupal::routeMatch()->getParameter('step');
-        $step = is_numeric($raw) ? (int) $raw : 1;
-        if ($step < 1) {
-            return 1;
-        }
-        if ($step > self::TOTAL_STEPS) {
-            return self::TOTAL_STEPS;
-        }
-        return $step;
-    }
-
-    /**
      * Returns tempstore key for this booking flow.
      */
     protected function getStoreKey(?AppointmentEntity $appointment): string
@@ -364,15 +407,28 @@ class AppointmentBookForm extends FormBase
     }
 
     /**
-     * Builds route URL for a specific step.
+     * Determines the maximum step the user is allowed to access.
+     *
+     * Each step is only reachable if all previous steps have stored data.
      */
-    protected function stepUrl(FormStateInterface $form_state, int $step): Url
+    protected function getMaxAllowedStep(array $data): int
     {
-        $appointment_id = $form_state->getValue('appointment_id') ? (int) $form_state->getValue('appointment_id') : NULL;
-        if ($appointment_id) {
-            return Url::fromRoute('appointment.edit_step', ['appointment' => $appointment_id, 'step' => $step]);
+        if (empty($data['agency'])) {
+            return 1;
         }
-        return Url::fromRoute('appointment.book_step', ['step' => $step]);
+        if (empty($data['appointment_type'])) {
+            return 2;
+        }
+        if (empty($data['adviser'])) {
+            return 3;
+        }
+        if (empty($data['appointment_date']) || empty($data['appointment_time'])) {
+            return 4;
+        }
+        if (empty($data['client_name']) || empty($data['client_email'])) {
+            return 5;
+        }
+        return self::TOTAL_STEPS;
     }
 
     /**
@@ -427,9 +483,9 @@ class AppointmentBookForm extends FormBase
 
         $adviser_label = '';
         if (!empty($data['adviser'])) {
-            /** @var AdviserEntity|null $adviser_entity_summary */
-            $adviser_entity_summary = \Drupal::entityTypeManager()->getStorage('adviser')->load((int) $data['adviser']);
-            $adviser_label = $adviser_entity_summary ? (string) $adviser_entity_summary->get('name')->value . ' (' . (string) $adviser_entity_summary->get('email')->value . ')' : '';
+            /** @var \Drupal\user\UserInterface|null $adviser_user */
+            $adviser_user = \Drupal::entityTypeManager()->getStorage('user')->load((int) $data['adviser']);
+            $adviser_label = $adviser_user ? $adviser_user->getDisplayName() . ' (' . $adviser_user->getEmail() . ')' : '';
         }
 
         $summary = [
@@ -504,10 +560,11 @@ class AppointmentBookForm extends FormBase
             return [];
         }
 
-        $ids = \Drupal::entityTypeManager()->getStorage('adviser')
+        $ids = \Drupal::entityTypeManager()->getStorage('user')
             ->getQuery()
             ->accessCheck(FALSE)
-            ->condition('agency', $agency_id)
+            ->condition('roles', 'adviser')
+            ->condition('field_adviser_agency', $agency_id)
             ->condition('status', 1)
             ->sort('name')
             ->execute();
@@ -517,25 +574,12 @@ class AppointmentBookForm extends FormBase
         }
 
         $options = [];
-        /** @var AdviserEntity $adviser */
-        foreach (\Drupal::entityTypeManager()->getStorage('adviser')->loadMultiple($ids) as $adviser) {
-            $options[(int) $adviser->id()] = (string) $adviser->get('name')->value . ' (' . (string) $adviser->get('email')->value . ')';
+        /** @var \Drupal\user\UserInterface $user */
+        foreach (\Drupal::entityTypeManager()->getStorage('user')->loadMultiple($ids) as $user) {
+            $options[(int) $user->id()] = $user->getDisplayName() . ' (' . $user->getEmail() . ')';
         }
 
         return $options;
-    }
-
-    /**
-     * Returns adviser name for selected agency/email.
-     */
-    protected function loadAdviserName(int $adviser_id): string
-    {
-        if ($adviser_id <= 0) {
-            return '';
-        }
-        /** @var AdviserEntity|null $adviser */
-        $adviser = \Drupal::entityTypeManager()->getStorage('adviser')->load($adviser_id);
-        return $adviser ? (string) $adviser->get('name')->value : '';
     }
 
     /**
@@ -545,7 +589,8 @@ class AppointmentBookForm extends FormBase
     {
         $query = \Drupal::entityTypeManager()->getStorage('appointment')->getQuery()->accessCheck(FALSE)
             ->condition('adviser_email', $adviser_email)
-            ->condition('status', ['pending', 'confirmed'], 'IN');
+            ->condition('status', ['pending', 'confirmed'], 'IN')
+            ->condition('deleted', 0);
 
         if ($exclude_id) {
             $query->condition('id', $exclude_id, '<>');

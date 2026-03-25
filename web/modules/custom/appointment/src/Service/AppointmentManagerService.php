@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Drupal\appointment\Service;
 
 use Drupal\appointment\Entity\AgencyEntity;
-use Drupal\appointment\Entity\AdviserEntity;
 use Drupal\appointment\Entity\AppointmentEntity;
 use Drupal\Component\Datetime\TimeInterface;
 use Drupal\Core\Datetime\DateFormatterInterface;
@@ -54,10 +53,11 @@ class AppointmentManagerService
             return [];
         }
 
-        $ids = $this->entityTypeManager->getStorage('adviser')
+        $ids = $this->entityTypeManager->getStorage('user')
             ->getQuery()
             ->accessCheck(FALSE)
-            ->condition('agency', $agency_id)
+            ->condition('roles', 'adviser')
+            ->condition('field_adviser_agency', $agency_id)
             ->condition('status', 1)
             ->sort('name')
             ->execute();
@@ -67,9 +67,9 @@ class AppointmentManagerService
         }
 
         $options = [];
-        /** @var AdviserEntity $adviser */
-        foreach ($this->entityTypeManager->getStorage('adviser')->loadMultiple($ids) as $adviser) {
-            $options[(int) $adviser->id()] = (string) $adviser->get('name')->value . ' (' . (string) $adviser->get('email')->value . ')';
+        /** @var \Drupal\user\UserInterface $user */
+        foreach ($this->entityTypeManager->getStorage('user')->loadMultiple($ids) as $user) {
+            $options[(int) $user->id()] = $user->getDisplayName() . ' (' . $user->getEmail() . ')';
         }
 
         return $options;
@@ -101,7 +101,8 @@ class AppointmentManagerService
     {
         $query = $this->entityTypeManager->getStorage('appointment')->getQuery()->accessCheck(FALSE)
             ->condition('adviser_email', $adviser_email)
-            ->condition('status', ['pending', 'confirmed'], 'IN');
+            ->condition('status', ['pending', 'confirmed'], 'IN')
+            ->condition('deleted', 0);
 
         if ($exclude_id) {
             $query->condition('id', $exclude_id, '<>');
@@ -159,7 +160,7 @@ class AppointmentManagerService
      */
     public function getAppointments(?UserInterface $account = NULL, ?string $email = NULL, ?int $type_tid = NULL): array
     {
-        $query = $this->entityTypeManager->getStorage('appointment')->getQuery()->accessCheck(FALSE)->sort('start_time', 'DESC');
+        $query = $this->entityTypeManager->getStorage('appointment')->getQuery()->accessCheck(FALSE)->condition('deleted', 0)->sort('start_time', 'DESC');
 
         if ($account && !$account->isAnonymous()) {
             $query->condition('uid', (int) $account->id());

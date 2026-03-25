@@ -69,7 +69,7 @@ class AppointmentCancelForm extends ConfirmFormBase
     {
         if ($this->appointment) {
             $this->appointment->set('status', 'cancelled');
-            $this->appointment->save();
+            $this->appointment->softDelete();
             \Drupal::service('appointment.email_service')->sendAppointmentEmail($this->appointment, 'cancellation');
             $this->messenger()->addStatus($this->t('Appointment cancelled.'));
         }

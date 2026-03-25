@@ -151,3 +151,15 @@ appointment.admin_confirm:
     parameters:
       appointment:
         type: entity:appointment
+
+appointment.admin_delete:
+  path: "/admin/structure/appointment/{appointment}/delete"
+  defaults:
+    _controller: '\Drupal\appointment\Controller\AppointmentAdminController::deleteAppointment'
+    _title: "Delete Appointment"
+  requirements:
+    _permission: "administer appointments"
+  options:
+    parameters:
+      appointment:
+        type: entity:appointment

@@ -12,10 +12,10 @@
                 return;
             }
 
-            
+
             var calendarEl = elements[0];
             var settings = drupalSettings.appointmentCalendar || {};
-            var adviserEmail = settings.adviserEmail || '';
+            var adviserId = settings.adviserId || 0;
             var bookedSlotsUrl = settings.bookedSlotsUrl || '';
             var excludeId = settings.excludeId || null;
             var dateInput = document.querySelector('input[name="appointment_date"]');
@@ -55,13 +55,13 @@
                     {
                         id: 'booked',
                         events: function (info, successCallback, failureCallback) {
-                            if (!bookedSlotsUrl || !adviserEmail) {
+                            if (!bookedSlotsUrl || !adviserId) {
                                 successCallback([]);
                                 return;
                             }
 
                             var url = bookedSlotsUrl
-                                + '?adviser_email=' + encodeURIComponent(adviserEmail)
+                                + '?adviser_id=' + encodeURIComponent(adviserId)
                                 + '&start=' + encodeURIComponent(info.startStr)
                                 + '&end=' + encodeURIComponent(info.endStr);
 

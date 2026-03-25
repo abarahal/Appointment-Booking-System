@@ -10,6 +10,7 @@ use Drupal\Core\Url;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\RequestStack;
+use Drupal\user\UserInterface;
 use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 
 /**
@@ -36,24 +37,51 @@ class AppointmentAdminController extends ControllerBase
     }
 
     /**
-     * Admin listing page for all appointments.
+     * Admin listing page for all appointments with filters and pagination.
      */
     public function listAppointments(): array
     {
         $request = $this->requestStack->getCurrentRequest();
+        $limit = 10;
 
+        // Read filter values from query string.
+        $filter_status = (string) ($request?->query->get('status') ?? '');
+        $filter_agency = (int) ($request?->query->get('agency') ?? 0);
+        $filter_adviser = (int) ($request?->query->get('adviser') ?? 0);
+        $filter_date_from = (string) ($request?->query->get('date_from') ?? '');
+        $filter_date_to = (string) ($request?->query->get('date_to') ?? '');
+
+        // Base query: exclude soft-deleted.
         $query = $this->entityTypeManager()
             ->getStorage('appointment')
             ->getQuery()
             ->accessCheck(FALSE)
+            ->condition('deleted', 0)
             ->sort('start_time', 'DESC');
 
-        $count_query = clone $query;
-        $total = count($count_query->execute());
+        // Apply filters.
+        if ($filter_status !== '' && in_array($filter_status, ['pending', 'confirmed', 'cancelled'], TRUE)) {
+            $query->condition('status', $filter_status);
+        }
+        if ($filter_agency > 0) {
+            $query->condition('agency', $filter_agency);
+        }
+        if ($filter_adviser > 0) {
+            $query->condition('adviser', $filter_adviser);
+        }
+        if ($filter_date_from !== '' && strtotime($filter_date_from)) {
+            $query->condition('start_time', strtotime($filter_date_from), '>=');
+        }
+        if ($filter_date_to !== '' && strtotime($filter_date_to . ' 23:59:59')) {
+            $query->condition('start_time', strtotime($filter_date_to . ' 23:59:59'), '<=');
+        }
 
-        $page = (int) ($request?->query->get('page') ?? 0);
-        $limit = 25;
-        $query->range($page * $limit, $limit);
+        // Count total for pager (use a separate count query).
+        $count_query = clone $query;
+        $total = (int) $count_query->count()->execute();
+
+        // Apply Drupal pager.
+        $query->pager($limit);
         $ids = $query->execute();
         $appointments = $ids ? $this->entityTypeManager()->getStorage('appointment')->loadMultiple($ids) : [];
 
@@ -66,7 +94,7 @@ class AppointmentAdminController extends ControllerBase
                 'client_email' => (string) $appt->get('client_email')->value,
                 'client_phone' => (string) $appt->get('client_phone')->value,
                 'agency' => $appt->get('agency')->entity?->label() ?? $this->t('N/A'),
-                'adviser' => (string) $appt->get('adviser_name')->value,
+                'adviser' => $appt->get('adviser')->entity ? $appt->get('adviser')->entity->getDisplayName() : ((string) $appt->get('adviser_name')->value),
                 'type' => $appt->get('appointment_type')->entity?->label() ?? $this->t('N/A'),
                 'start_time' => date('Y-m-d H:i', (int) $appt->get('start_time')->value),
                 'end_time' => date('Y-m-d H:i', (int) $appt->get('end_time')->value),
@@ -115,6 +143,12 @@ class AppointmentAdminController extends ControllerBase
                     '#attributes' => ['class' => ['button', 'button--small', 'button--danger']],
                 ];
             }
+            $actions[] = [
+                '#type' => 'link',
+                '#title' => $this->t('Delete'),
+                '#url' => Url::fromRoute('appointment.admin_delete', ['appointment' => $row['id']]),
+                '#attributes' => ['class' => ['button', 'button--small', 'button--danger']],
+            ];
 
             $table_rows[] = [
                 $row['id'],
@@ -131,6 +165,9 @@ class AppointmentAdminController extends ControllerBase
         }
 
         $build = [];
+
+        // Filters form.
+        $build['filters'] = $this->buildFilterForm($filter_status, $filter_agency, $filter_adviser, $filter_date_from, $filter_date_to);
 
         // Actions bar.
         $build['actions_bar'] = [
@@ -157,16 +194,93 @@ class AppointmentAdminController extends ControllerBase
             '#attributes' => ['class' => ['appointment-admin-table']],
         ];
 
-        // Pager.
-        if ($total > $limit) {
-            $build['pager'] = ['#type' => 'pager'];
-        }
+        // Pager (always rendered — Drupal hides it when single page).
+        $build['pager'] = ['#type' => 'pager'];
 
         $build['#attached'] = [
             'library' => ['appointment/appointment.admin'],
         ];
 
         return $build;
+    }
+
+    /**
+     * Builds the admin filter form as a render array.
+     */
+    protected function buildFilterForm(string $status, int $agency, int $adviser, string $date_from, string $date_to): array
+    {
+        $agency_options = ['' => $this->t('- All agencies -')];
+        $agency_ids = $this->entityTypeManager()->getStorage('agency')->getQuery()->accessCheck(FALSE)->condition('status', 1)->sort('name')->execute();
+        foreach ($this->entityTypeManager()->getStorage('agency')->loadMultiple($agency_ids) as $ag) {
+            $agency_options[$ag->id()] = $ag->label();
+        }
+
+        $adviser_options = ['' => $this->t('- All advisers -')];
+        $adviser_ids = $this->entityTypeManager()->getStorage('user')->getQuery()->accessCheck(FALSE)->condition('roles', 'adviser')->condition('status', 1)->sort('name')->execute();
+        foreach ($this->entityTypeManager()->getStorage('user')->loadMultiple($adviser_ids) as $adv) {
+            assert($adv instanceof UserInterface);
+            $adviser_options[$adv->id()] = $adv->getDisplayName();
+        }
+
+        $status_options = [
+            '' => $this->t('- All statuses -'),
+            'pending' => $this->t('Pending'),
+            'confirmed' => $this->t('Confirmed'),
+            'cancelled' => $this->t('Cancelled'),
+        ];
+
+        $list_url = Url::fromRoute('appointment.admin_list')->toString();
+
+        return [
+            '#type' => 'inline_template',
+            '#template' => '
+                <div class="appointment-admin-filters">
+                  <form method="get" action="{{ list_url }}">
+                    <div class="appointment-filters-inline">
+                      <label>{{ "Status"|t }}
+                        <select name="status">
+                          {% for val, label in status_options %}
+                            <option value="{{ val }}"{{ val == current_status ? " selected" : "" }}>{{ label }}</option>
+                          {% endfor %}
+                        </select>
+                      </label>
+                      <label>{{ "Agency"|t }}
+                        <select name="agency">
+                          {% for val, label in agency_options %}
+                            <option value="{{ val }}"{{ val == current_agency ? " selected" : "" }}>{{ label }}</option>
+                          {% endfor %}
+                        </select>
+                      </label>
+                      <label>{{ "Adviser"|t }}
+                        <select name="adviser">
+                          {% for val, label in adviser_options %}
+                            <option value="{{ val }}"{{ val == current_adviser ? " selected" : "" }}>{{ label }}</option>
+                          {% endfor %}
+                        </select>
+                      </label>
+                      <label>{{ "From"|t }}
+                        <input type="date" name="date_from" value="{{ date_from }}">
+                      </label>
+                      <label>{{ "To"|t }}
+                        <input type="date" name="date_to" value="{{ date_to }}">
+                      </label>
+                      <button type="submit" class="button button--primary">{{ "Filter"|t }}</button>
+                      <a href="{{ list_url }}" class="button">{{ "Reset"|t }}</a>
+                    </div>
+                  </form>
+                </div>',
+            '#context' => [
+                'list_url' => $list_url,
+                'status_options' => $status_options,
+                'agency_options' => $agency_options,
+                'adviser_options' => $adviser_options,
+                'current_status' => $status,
+                'current_agency' => (string) $agency,
+                'current_adviser' => (string) $adviser,
+                'date_from' => $date_from,
+                'date_to' => $date_to,
+            ],
+        ];
     }
 
     /**
@@ -190,20 +304,36 @@ class AppointmentAdminController extends ControllerBase
     }
 
     /**
+     * Soft-deletes an appointment from the admin interface.
+     */
+    public function deleteAppointment(AppointmentEntity $appointment): \Symfony\Component\HttpFoundation\RedirectResponse
+    {
+        if (!$appointment->isDeleted()) {
+            $appointment->softDelete();
+            $this->messenger()->addStatus($this->t('Appointment #@id has been deleted.', ['@id' => $appointment->id()]));
+        } else {
+            $this->messenger()->addWarning($this->t('Appointment #@id is already deleted.', ['@id' => $appointment->id()]));
+        }
+
+        return $this->redirect('appointment.admin_list');
+    }
+
+    /**
      * Admin dashboard overview page.
      */
     public function dashboard(): array
     {
         $storage = $this->entityTypeManager()->getStorage('appointment');
 
-        $total = count($storage->getQuery()->accessCheck(FALSE)->execute());
-        $pending = count($storage->getQuery()->accessCheck(FALSE)->condition('status', 'pending')->execute());
-        $confirmed = count($storage->getQuery()->accessCheck(FALSE)->condition('status', 'confirmed')->execute());
-        $cancelled = count($storage->getQuery()->accessCheck(FALSE)->condition('status', 'cancelled')->execute());
+        $total = count($storage->getQuery()->accessCheck(FALSE)->condition('deleted', 0)->execute());
+        $pending = count($storage->getQuery()->accessCheck(FALSE)->condition('deleted', 0)->condition('status', 'pending')->execute());
+        $confirmed = count($storage->getQuery()->accessCheck(FALSE)->condition('deleted', 0)->condition('status', 'confirmed')->execute());
+        $cancelled = count($storage->getQuery()->accessCheck(FALSE)->condition('deleted', 0)->condition('status', 'cancelled')->execute());
 
         $today_start = strtotime('today');
         $today_end = strtotime('tomorrow');
         $today_count = count($storage->getQuery()->accessCheck(FALSE)
+            ->condition('deleted', 0)
             ->condition('start_time', $today_start, '>=')
             ->condition('start_time', $today_end, '<')
             ->condition('status', 'cancelled', '<>')

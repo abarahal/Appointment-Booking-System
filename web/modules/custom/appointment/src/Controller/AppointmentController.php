@@ -38,7 +38,7 @@ class AppointmentController extends ControllerBase
         $phone = (string) $this->getRequest()->query->get('phone', '');
         $type_tid = (int) $this->getRequest()->query->get('type', 0);
 
-        $query = $this->entityTypeManager()->getStorage('appointment')->getQuery()->accessCheck(FALSE)->sort('start_time', 'DESC');
+        $query = $this->entityTypeManager()->getStorage('appointment')->getQuery()->accessCheck(FALSE)->condition('deleted', 0)->sort('start_time', 'DESC');
         if ($account->isAuthenticated()) {
             $query->condition('uid', (int) $account->id());
         } elseif ($email !== '') {
@@ -67,7 +67,7 @@ class AppointmentController extends ControllerBase
                 'client_name' => (string) $appointment->get('client_name')->value,
                 'client_email' => (string) $appointment->get('client_email')->value,
                 'agency' => $appointment->get('agency')->entity?->label() ?? (string) $this->t('N/A'),
-                'adviser' => (string) $appointment->get('adviser_name')->value,
+                'adviser' => $appointment->get('adviser')->entity ? $appointment->get('adviser')->entity->getDisplayName() : ((string) $appointment->get('adviser_name')->value),
                 'type' => $type_label,
                 'start_time' => date('Y-m-d H:i', (int) $appointment->get('start_time')->value),
                 'status' => (string) $appointment->get('status')->value,
@@ -96,12 +96,14 @@ class AppointmentController extends ControllerBase
     public function bookedSlots(): JsonResponse
     {
         $request = $this->getRequest();
+        $adviser_id = (int) $request->query->get('adviser_id', 0);
+        // Fallback: also accept adviser_email for backward compatibility.
         $adviser_email = (string) $request->query->get('adviser_email', '');
         $range_start = (string) $request->query->get('start', '');
         $range_end = (string) $request->query->get('end', '');
         $exclude_id = (int) $request->query->get('exclude_id', 0);
 
-        if ($adviser_email === '' || $range_start === '' || $range_end === '') {
+        if (($adviser_id === 0 && $adviser_email === '') || $range_start === '' || $range_end === '') {
             return new JsonResponse([]);
         }
 
@@ -113,10 +115,16 @@ class AppointmentController extends ControllerBase
 
         $query = $this->entityTypeManager()->getStorage('appointment')->getQuery()
             ->accessCheck(FALSE)
-            ->condition('adviser_email', $adviser_email)
             ->condition('status', ['pending', 'confirmed'], 'IN')
+            ->condition('deleted', 0)
             ->condition('start_time', $start_ts, '>=')
             ->condition('end_time', $end_ts, '<=');
+
+        if ($adviser_id > 0) {
+            $query->condition('adviser', $adviser_id);
+        } else {
+            $query->condition('adviser_email', $adviser_email);
+        }
 
         if ($exclude_id > 0) {
             $query->condition('id', $exclude_id, '<>');

@@ -53,7 +53,7 @@ class AppointmentEntity extends ContentEntityBase
         $fields['adviser'] = BaseFieldDefinition::create('entity_reference')
             ->setLabel(new TranslatableMarkup('Adviser'))
             ->setRequired(FALSE)
-            ->setSetting('target_type', 'adviser');
+            ->setSetting('target_type', 'user');
 
         $fields['adviser_name'] = BaseFieldDefinition::create('string')
             ->setLabel(new TranslatableMarkup('Adviser name'))
@@ -120,6 +120,28 @@ class AppointmentEntity extends ContentEntityBase
             ->setLabel(new TranslatableMarkup('Reminder sent'))
             ->setDefaultValue(FALSE);
 
+        $fields['deleted'] = BaseFieldDefinition::create('boolean')
+            ->setLabel(new TranslatableMarkup('Deleted'))
+            ->setDescription(new TranslatableMarkup('Soft-delete flag. TRUE means the appointment is logically removed.'))
+            ->setDefaultValue(FALSE);
+
         return $fields;
+    }
+
+    /**
+     * Marks this appointment as soft-deleted.
+     */
+    public function softDelete(): void
+    {
+        $this->set('deleted', TRUE);
+        $this->save();
+    }
+
+    /**
+     * Whether this appointment is soft-deleted.
+     */
+    public function isDeleted(): bool
+    {
+        return (bool) $this->get('deleted')->value;
     }
 }

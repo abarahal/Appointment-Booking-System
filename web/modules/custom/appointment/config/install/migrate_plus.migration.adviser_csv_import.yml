@@ -1,0 +1,27 @@
+id: adviser_csv_import
+label: "Import advisers from CSV as Drupal users"
+migration_group: appointment
+source:
+  plugin: csv
+  path: modules/custom/appointment/data/advisers.csv
+  ids:
+    - id
+  header_offset: 0
+process:
+  name: name
+  mail: email
+  status:
+    plugin: default_value
+    default_value: 1
+  roles:
+    plugin: default_value
+    default_value:
+      - adviser
+  field_adviser_agency: agency
+  field_working_hours: working_hours
+  field_specializations: specializations
+destination:
+  plugin: "entity:user"
+migration_dependencies:
+  optional:
+    - agency_csv_import
