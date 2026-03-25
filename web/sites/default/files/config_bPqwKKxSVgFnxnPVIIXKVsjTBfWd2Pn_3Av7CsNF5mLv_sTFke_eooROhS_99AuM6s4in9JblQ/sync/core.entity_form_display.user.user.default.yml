@@ -1,0 +1,44 @@
+uuid: 3b9af023-e6da-4eca-bd1b-0d0d1a4fd600
+langcode: en
+status: true
+dependencies:
+  config:
+    - field.field.user.user.field_adviser_agency
+    - field.field.user.user.field_specializations
+    - field.field.user.user.field_working_hours
+    - field.field.user.user.user_picture
+    - image.style.thumbnail
+  module:
+    - image
+    - user
+_core:
+  default_config_hash: FaQ9Ptcpxpg30AtiqRDtl_8zbJArHP1LPfug_s59TOA
+id: user.user.default
+targetEntityType: user
+bundle: user
+mode: default
+content:
+  account:
+    weight: -10
+    region: content
+  contact:
+    weight: 5
+    region: content
+  language:
+    weight: 0
+    region: content
+  timezone:
+    weight: 6
+    region: content
+  user_picture:
+    type: image_image
+    weight: -1
+    region: content
+    settings:
+      progress_indicator: throbber
+      preview_image_style: thumbnail
+    third_party_settings: {  }
+hidden:
+  field_adviser_agency: true
+  field_specializations: true
+  field_working_hours: true

@@ -91,11 +91,11 @@ class AppointmentSettingsForm extends ConfigFormBase
             '#required' => TRUE,
         ];
 
-        $form['notification_email'] = [
-            '#type' => 'email',
-            '#title' => $this->t('Notification email'),
-            '#description' => $this->t('Admin email for appointment notifications. Leave blank to use site email.'),
-            '#default_value' => $config->get('notification_email') ?? '',
+        $form['email_notifications_enabled'] = [
+            '#type' => 'checkbox',
+            '#title' => $this->t('Enable email notifications'),
+            '#description' => $this->t('When unchecked, no appointment emails (confirmations, cancellations, reminders) will be sent.'),
+            '#default_value' => $config->get('email_notifications_enabled') ?? TRUE,
         ];
 
         $form['reminder_hours_before'] = [
@@ -138,7 +138,7 @@ class AppointmentSettingsForm extends ConfigFormBase
             ->set('working_hours_end', (string) $form_state->getValue('working_hours_end'))
             ->set('max_advance_days', (int) $form_state->getValue('max_advance_days'))
             ->set('csv_batch_size', (int) $form_state->getValue('csv_batch_size'))
-            ->set('notification_email', (string) $form_state->getValue('notification_email'))
+            ->set('email_notifications_enabled', (bool) $form_state->getValue('email_notifications_enabled'))
             ->set('reminder_hours_before', (int) $form_state->getValue('reminder_hours_before'))
             ->save();
 

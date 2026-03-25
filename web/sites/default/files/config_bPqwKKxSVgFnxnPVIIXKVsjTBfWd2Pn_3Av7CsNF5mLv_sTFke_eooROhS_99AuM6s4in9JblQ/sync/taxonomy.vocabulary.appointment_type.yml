@@ -1,0 +1,9 @@
+uuid: 89d974c4-6393-4e61-824d-81430365ac21
+langcode: en
+status: true
+dependencies: {  }
+name: 'Appointment types'
+vid: appointment_type
+description: 'Types used by the appointment booking form.'
+weight: 0
+new_revision: false

@@ -1,0 +1,14 @@
+uuid: 5d1952b4-54f3-45bb-9811-9a14a520ee13
+langcode: en
+status: true
+dependencies: {  }
+_core:
+  default_config_hash: vymHlgJy26BuI5GGj9-IXjwR3dRC5C0tij4BpWJnoqw
+id: feedback
+label: 'Website feedback'
+recipients:
+  - ayoubbarahal2@gmail.com
+reply: ''
+weight: 0
+message: 'Your message has been sent.'
+redirect: ''

@@ -1,0 +1,14 @@
+uuid: ecbe78c2-5826-4708-bc82-d2ce06d4d93c
+langcode: en
+status: true
+dependencies:
+  config:
+    - user.role.adviser
+  module:
+    - user
+id: user_add_role_action.adviser
+label: 'Add the Adviser role to the selected user(s)'
+type: user
+plugin: user_add_role_action
+configuration:
+  rid: adviser

@@ -7,21 +7,52 @@ source:
   ids:
     - id
   header_offset: 0
+  constants:
+    default_pass: "ChangeMe2026!"
 process:
-  name: name
+  _existing_uid:
+    - plugin: entity_lookup
+      entity_type: user
+      value_key: mail
+      source: email
+  uid:
+    - plugin: null_coalesce
+      source:
+        - "@_existing_uid"
+  name:
+    - plugin: skip_on_empty
+      method: process
+      source: name
+    - plugin: make_unique_entity_field
+      entity_type: user
+      field: name
+      postfix: _
+      start: 2
+      length: 3
   mail: email
+  init: email
   status:
     plugin: default_value
     default_value: 1
+  pass: constants/default_pass
   roles:
     plugin: default_value
     default_value:
       - adviser
-  field_adviser_agency: agency
+  field_adviser_agency:
+    plugin: migration_lookup
+    migration: agency_csv_import
+    source: agency
+    no_stub: true
   field_working_hours: working_hours
   field_specializations: specializations
 destination:
   plugin: "entity:user"
+  overwrite_properties:
+    - roles
+    - field_adviser_agency
+    - field_working_hours
+    - field_specializations
 migration_dependencies:
-  optional:
+  required:
     - agency_csv_import

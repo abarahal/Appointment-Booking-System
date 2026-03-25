@@ -102,6 +102,7 @@ class AppointmentEntity extends ContentEntityBase
                 'pending' => 'Pending',
                 'confirmed' => 'Confirmed',
                 'cancelled' => 'Cancelled',
+                'deleted' => 'Deleted',
             ]])
             ->setDefaultValue('pending');
 

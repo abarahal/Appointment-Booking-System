@@ -1,0 +1,10 @@
+uuid: ac2eda32-10e6-43c2-995c-27f9e9f464ee
+langcode: en
+status: true
+dependencies: {  }
+id: appointment
+label: appointment
+description: ''
+source_type: null
+module: null
+shared_configuration: null

@@ -51,16 +51,16 @@ class AppointmentAdminController extends ControllerBase
         $filter_date_from = (string) ($request?->query->get('date_from') ?? '');
         $filter_date_to = (string) ($request?->query->get('date_to') ?? '');
 
-        // Base query: exclude soft-deleted.
+        // Base query: exclude deleted appointments.
         $query = $this->entityTypeManager()
             ->getStorage('appointment')
             ->getQuery()
             ->accessCheck(FALSE)
-            ->condition('deleted', 0)
+            ->condition('status', 'deleted', '<>')
             ->sort('start_time', 'DESC');
 
         // Apply filters.
-        if ($filter_status !== '' && in_array($filter_status, ['pending', 'confirmed', 'cancelled'], TRUE)) {
+        if ($filter_status !== '' && in_array($filter_status, ['pending', 'confirmed', 'cancelled', 'deleted'], TRUE)) {
             $query->condition('status', $filter_status);
         }
         if ($filter_agency > 0) {
@@ -135,20 +135,14 @@ class AppointmentAdminController extends ControllerBase
                 '#url' => Url::fromRoute('appointment.edit', ['appointment' => $row['id']]),
                 '#attributes' => ['class' => ['button', 'button--small']],
             ];
-            if ($row['status'] !== 'cancelled') {
+            if ($row['status'] !== 'deleted') {
                 $actions[] = [
                     '#type' => 'link',
-                    '#title' => $this->t('Cancel'),
-                    '#url' => Url::fromRoute('appointment.cancel', ['appointment' => $row['id']]),
+                    '#title' => $this->t('Delete'),
+                    '#url' => Url::fromRoute('appointment.admin_delete', ['appointment' => $row['id']]),
                     '#attributes' => ['class' => ['button', 'button--small', 'button--danger']],
                 ];
             }
-            $actions[] = [
-                '#type' => 'link',
-                '#title' => $this->t('Delete'),
-                '#url' => Url::fromRoute('appointment.admin_delete', ['appointment' => $row['id']]),
-                '#attributes' => ['class' => ['button', 'button--small', 'button--danger']],
-            ];
 
             $table_rows[] = [
                 $row['id'],
@@ -194,7 +188,7 @@ class AppointmentAdminController extends ControllerBase
             '#attributes' => ['class' => ['appointment-admin-table']],
         ];
 
-        // Pager (always rendered — Drupal hides it when single page).
+        // Pager 
         $build['pager'] = ['#type' => 'pager'];
 
         $build['#attached'] = [
@@ -227,6 +221,7 @@ class AppointmentAdminController extends ControllerBase
             'pending' => $this->t('Pending'),
             'confirmed' => $this->t('Confirmed'),
             'cancelled' => $this->t('Cancelled'),
+            'deleted' => $this->t('Deleted'),
         ];
 
         $list_url = Url::fromRoute('appointment.admin_list')->toString();
@@ -308,8 +303,9 @@ class AppointmentAdminController extends ControllerBase
      */
     public function deleteAppointment(AppointmentEntity $appointment): \Symfony\Component\HttpFoundation\RedirectResponse
     {
-        if (!$appointment->isDeleted()) {
-            $appointment->softDelete();
+        if ($appointment->get('status')->value !== 'deleted') {
+            $appointment->set('status', 'deleted');
+            $appointment->save();
             $this->messenger()->addStatus($this->t('Appointment #@id has been deleted.', ['@id' => $appointment->id()]));
         } else {
             $this->messenger()->addWarning($this->t('Appointment #@id is already deleted.', ['@id' => $appointment->id()]));

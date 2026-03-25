@@ -1,0 +1,4 @@
+id: appointment
+label: "Appointment module migrations"
+description: "Imports agencies and advisers from CSV files."
+source_type: "CSV files"

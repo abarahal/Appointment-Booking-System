@@ -83,7 +83,20 @@ function appointment_install(): void
             }
             foreach ($agency_values['advisers'] as $adv) {
                 $existing = $user_storage->getQuery()->accessCheck(FALSE)->condition('mail', $adv['email'])->range(0, 1)->execute();
-                if (!$existing) {
+                if ($existing) {
+                    // User already exists — ensure adviser role and fields are set.
+                    /** @var \Drupal\user\UserInterface $user */
+                    $user = $user_storage->load(reset($existing));
+                    if ($user && !$user->hasRole('adviser')) {
+                        $user->addRole('adviser');
+                    }
+                    if ($user) {
+                        $user->set('field_adviser_agency', $agency->id());
+                        $user->set('field_working_hours', $agency_values['operating_hours']);
+                        $user->set('field_specializations', $adv['specializations'] ?? '');
+                        $user->save();
+                    }
+                } else {
                     /** @var \Drupal\user\UserInterface $user */
                     $user = $user_storage->create([
                         'name' => $adv['name'],
@@ -144,6 +157,30 @@ function appointment_install(): void
                 'access_token' => hash('sha256', uniqid('appointment_', TRUE)),
             ])->save();
         }
+    }
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function appointment_uninstall(): void
+{
+    // Remove 'adviser' role from all users that have it.
+    $user_storage = \Drupal::entityTypeManager()->getStorage('user');
+    $uids = $user_storage->getQuery()
+        ->accessCheck(FALSE)
+        ->condition('roles', 'adviser')
+        ->execute();
+    foreach ($user_storage->loadMultiple($uids) as $user) {
+        /** @var \Drupal\user\UserInterface $user */
+        $user->removeRole('adviser');
+        $user->save();
+    }
+
+    // Delete the appointment_type vocabulary.
+    $vocab = \Drupal\taxonomy\Entity\Vocabulary::load('appointment_type');
+    if ($vocab) {
+        $vocab->delete();
     }
 }
 
@@ -606,4 +643,21 @@ function appointment_update_10009(): string
     }
 
     return 'Removed adviser entity type and dropped adviser table.';
+}
+
+/**
+ * Add "deleted" to the appointment status allowed values.
+ */
+function appointment_update_10010(): string
+{
+    $update_manager = \Drupal::entityDefinitionUpdateManager();
+    $field = $update_manager->getFieldStorageDefinition('status', 'appointment');
+    if ($field instanceof \Drupal\Core\Field\BaseFieldDefinition) {
+        $settings = $field->getSettings();
+        $settings['allowed_values']['deleted'] = 'Deleted';
+        $field->setSettings($settings);
+        $update_manager->updateFieldStorageDefinition($field);
+    }
+
+    return 'Added "deleted" status to appointment allowed values.';
 }

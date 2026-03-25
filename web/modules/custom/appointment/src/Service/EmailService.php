@@ -31,6 +31,10 @@ class EmailService
      */
     public function sendAppointmentEmail(AppointmentEntity $appointment, string $mail_key, array $extra_params = []): void
     {
+        if (!\Drupal::config('appointment.settings')->get('email_notifications_enabled')) {
+            return;
+        }
+
         $to = (string) $appointment->get('client_email')->value;
         if ($to === '') {
             return;

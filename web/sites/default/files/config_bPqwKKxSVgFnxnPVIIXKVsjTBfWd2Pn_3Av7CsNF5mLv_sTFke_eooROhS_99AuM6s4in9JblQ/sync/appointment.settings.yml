@@ -1,0 +1,7 @@
+slot_duration: 60
+working_hours_start: '08:00'
+working_hours_end: '18:00'
+max_advance_days: 90
+csv_batch_size: 100
+notification_email: ''
+reminder_hours_before: 24
